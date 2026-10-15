@@ -15,8 +15,11 @@ def inspect(path):
         names = z.namelist()
         stores = [n for n in names if n.endswith("/libassembly-store.so")]
         aot = [n for n in names if "/libaot-" in n and n.endswith(".so")]
+        h = hashlib.sha256()
         with path.open("rb") as f:
-            digest = hashlib.file_digest(f, "sha256").hexdigest()
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                h.update(chunk)
+        digest = h.hexdigest()
         return {
             "path": str(path),
             "size": path.stat().st_size,
