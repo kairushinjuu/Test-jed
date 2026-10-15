@@ -17,6 +17,18 @@ python -m unittest discover -s tests -v
 
 For Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`.
 
+## Obtain an APK for local analysis
+
+The original XAPK is not committed to this public repository. See [docs/inputs.md](docs/inputs.md) for the original file inventory, its known CRC error, and a verified publisher download.
+
+To extract the intact parts from a local XAPK:
+
+```bash
+python scripts/extract_xapk.py input/Japanese+Dictionary+Takoboto_2.1.7_APKPure.xapk --output input/from_xapk
+```
+
+Or obtain the publisher's universal APK directly from https://takoboto.jp/download/android/jp.takoboto.apk and place it at `input/takoboto.apk`.
+
 ## Inspect a local APK
 
 Place the original APK at `input/takoboto.apk`:
