@@ -58,3 +58,12 @@ After the first successful v0.12 native build, code review identified upstream r
 - Recommended test env `DM_MOVIE_SKIP=1`, `DM_VK_PREWARM=0`, `DM_VK_SLOT_POOL=0` for current slot-pool-only A/B; if bypass aborts, remove movie flag. Unaltered game and existing caches preserved.
 - Alternate validated game-flow: source OOT README describes loading user's own `Kokiri Forest Autosave` `slot_00/{progress,caption}.sav` from game menu to bypass first New Game movie. Save bytes not bundled or provided; do not claim available.
 - Wrote `smx930_intro_skip/INTRO_SKIP.md` with exact evidence, caveats and rollback. No physical device test or new APK this turn.
+
+## 2026-11-17 ~15:57:57 JST — experimental video-skip regression
+- Searched Google Drive via connected authenticated source; identified latest private game log ID `1QMU_hDdEkDB_oOBL9KHIMGCzzXosLPhx` (128,077 bytes) and digest ID `1uPkGcluj4sK2D_1J19EGOwl5o9yDoPJD` (1,629 bytes). Materialized into container; raw log withheld from public repository.
+- Inspected all 883 lines and digest; confirmed `DM_MOVIE_SKIP=1`, `DM_VK_PREWARM=0`, `DM_VK_SLOT_POOL=0` effective; AV1 early EOS after packet 5. Heavy scene starts around log game 35 sec rather than previous full intro (3 min).
+- Digest says OOM, but kernel lmkd/tombstone not provided; categorized as **launcher OOM classification, Android cause unverified**.
+- Source audit `vka_exec.c`: `VKA_ENV("DM_VK_SLOT_POOL",0)` does read override; prior `Mali command pools` log present with flag ON, absent in new OFF run. Launcher unknown-switch warning likely whitelist false positive; no automatic assertion of GPU correctness.
+- Compared 15:35 prior run; latest 2.5 FPS heavy-scene window (then a 0.6 FPS isolated sample); draw work 272.7 ms/frame, `images+pass+key` sample 253.32 us/draw; queue submit median 8.5 ms; GPU part 231.1 ms; image allocation rises 1565 MiB/437 images, total allocations 2913 MiB; observed MemAvailable minimum 1567 MiB and VMA max 35150.
+- Re-ranked high-gain source targets: image/pass/pipeline-key state resolution in `vka_draw.c` then memory residency and 12,288² render target, then queue submissions. Do not disable render dependencies, force a hard image cap or claim 50 FPS.
+- Copied current standard-library analyzer from v0.14, added real movie-skip recognition, effective slot-pool env status + activation and validator warning differentiation, and sampled draw-path cost; ran standalone synthetic tests (3 pass). No APK rebuild, no private raw logs in report. Source and metrics backups/checkpoint next.

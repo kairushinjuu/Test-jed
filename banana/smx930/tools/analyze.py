@@ -44,6 +44,10 @@ REPLAY_OTHER = re.compile(r'pace cost up to frame .*?other records ([\d.]+)')
 ENC_WATCHDOG = re.compile(r'command encoder: the replay thread has waited ([\d.]+) s for the encoder')
 GPU_PART_LONG = re.compile(r'GPU time: a part ran ([\d.]+) ms')
 ENC_DISPATCH_COST = re.compile(r'encoder calls ms \(count\):.*?dispatches ([\d.]+) \(\d+\)')
+MOVIE_SKIP = re.compile(r'DM_MOVIE_SKIP: AV1 decoder (\d+).*?ends its stream at packet (\d+)')
+DRAW_PATH = re.compile(r'draw path ([\d.]+) us a draw \(1 in (\d+) timed:.*?images\+pass\+key ([\d.]+)')
+DRAW_RECORDS = re.compile(r'recording ([\d.]+) ms = draws ([\d.]+).*?commit ([\d.]+) .*?other records ([\d.]+)')
+
 
 
 
@@ -74,6 +78,8 @@ def parse(text: str, digest: str = '') -> dict:
     scene_windows = []
     pw_progress = []; pw_floors = []; saved_pipelines = []; replay_other = []
     audio_disconnections = 0
+    movie_skip_seen=[]; draw_samples=[]
+    slot_pool_activated=False; slot_pool_validator_warning=False
     encoder_watchdog=[]; gpu_part_long=[]; encoder_dispatch_cost=[]
     for i, s in enumerate(lines):
         m = FPS.search(s)
@@ -101,6 +107,12 @@ def parse(text: str, digest: str = '') -> dict:
         if m := PREWARM_FLOOR.search(s): pw_floors.append({'available_mib':int(m[1]),'threshold_mib':int(m[2])})
         if m := PIPELINE_CACHE_SAVED.search(s): saved_pipelines.append({'bytes':int(m[1]),'made_in_run':int(m[2])})
         if 'AAUDIO_STREAM_STATE_DISCONNECTED' in s: audio_disconnections += 1
+        if m := MOVIE_SKIP.search(s): movie_skip_seen.append({'line':i+1,'decoder':int(m[1]),'packet':int(m[2])})
+        if m := DRAW_PATH.search(s):
+            rec=DRAW_RECORDS.search(s)
+            draw_samples.append({'line':i+1,'per_draw_us':float(m[1]),'sampling_interval':int(m[2]),'images_pass_key_us':float(m[3]),'draw_recording_ms':float(rec[2]) if rec else None,'total_recording_ms':float(rec[1]) if rec else None})
+        if 'Mali command pools: one pool per completed replay slot' in s: slot_pool_activated=True
+        if 'DM_VK_SLOT_POOL (the game' in s and 'not a switch of this build' in s: slot_pool_validator_warning=True
         if m := ENC_WATCHDOG.search(s): encoder_watchdog.append({'line':i+1,'wait_s':float(m[1])})
         if m := GPU_PART_LONG.search(s): gpu_part_long.append({'line':i+1,'ms':float(m[1])})
         if m := ENC_DISPATCH_COST.search(s): encoder_dispatch_cost.append({'line':i+1,'ms_per_frame':float(m[1])})
@@ -135,6 +147,9 @@ def parse(text: str, digest: str = '') -> dict:
     if swapchain_fail: flags.append('SWAPCHAIN_FAILED')
     if not swapchain_ok: flags.append('NO_SUCCESSFUL_SWAPCHAIN_OBSERVED')
     if digest_oom: flags.append('APP_DIGEST_REPORTS_OOM_NOT_PROVEN_BY_LOG')
+    if movie_skip_seen: flags.append('MOVIE_SKIP_CONFIRMED')
+    if slot_pool_validator_warning: flags.append('LAUNCHER_UNKNOWN_SLOT_POOL_FLAG_NATIVE_READS_FLAG')
+    if draw_samples and draw_samples[-1]['images_pass_key_us'] >= 100: flags.append('DRAW_RESOURCE_RESOLUTION_OVER_100US')
     if digest_android_closed_unknown: flags.append('ANDROID_CLOSED_CAUSE_UNCONFIRMED')
     if audio_disconnections: flags.append('AUDIO_STREAM_DISCONNECTED')
     if encoder_watchdog: flags.append('COMMAND_ENCODER_WAIT_OVER_500MS')
@@ -162,7 +177,7 @@ def parse(text: str, digest: str = '') -> dict:
         'target_hardware':'Samsung SM-X930 / Immortalis Mali-G925 MC12',
         'target_fps': TARGET,
         'game_title_id': TARGET_ID,
-        'gpu':gpu, 'driver':driver, 'build':build, 'environment': {k: env_values.get(k) for k in ('DM_GRAPHICS_SCALE','DM_ROMFS_OVERLAY','DM_VK_NDSR','DM_VK_PSO_SLOTS','DM_VK_PREWARM','DM_VK_IMG_RESERVE_MB','DM_MEM_FILEBACK','DM_MEM_FILEBACK_KINDS','DM_VK_PSO_ASYNC','DM_VK_TL_HOST','DM_DBG_AU_FRAMES','DM_CODEC_STATS')}, 'log_lines':len(lines),
+        'gpu':gpu, 'driver':driver, 'build':build, 'environment': {k: env_values.get(k) for k in ('DM_GRAPHICS_SCALE','DM_ROMFS_OVERLAY','DM_VK_NDSR','DM_VK_PSO_SLOTS','DM_VK_PREWARM','DM_VK_IMG_RESERVE_MB','DM_MEM_FILEBACK','DM_MEM_FILEBACK_KINDS','DM_VK_PSO_ASYNC','DM_VK_TL_HOST','DM_DBG_AU_FRAMES','DM_CODEC_STATS','DM_MOVIE_SKIP','DM_VK_SLOT_POOL')}, 'log_lines':len(lines),
         'swapchain_successes':swapchain_ok,'invalid_external_handle_errors':swapchain_fail,
         'intro_complete':intro_end is not None, 'intro_fps_median':rnd(statistics.median(phase_fps('intro'))) if phase_fps('intro') else None,
         'post_intro_fps_samples':len(play), 'post_intro_median_fps':rnd(play_median), 'post_intro_p10_fps':rnd(play_p10),
@@ -177,6 +192,11 @@ def parse(text: str, digest: str = '') -> dict:
         'audio_zero_padded_ms': rnd(sum(x['silence_ms'] for x in audio_samples)) if audio_samples else None,
         'aaudio_stream': aaudio_open[-1] if aaudio_open else None,
         'aaudio_disconnections': audio_disconnections,
+        'movie_skip_confirmed': bool(movie_skip_seen),
+        'movie_skip_packet': movie_skip_seen[0]['packet'] if movie_skip_seen else None,
+        'mali_slot_pool_activation_logged': slot_pool_activated,
+        'mali_slot_pool_validator_warning': slot_pool_validator_warning,
+        'draw_path_last_sample': draw_samples[-1] if draw_samples else None,
         'encoder_wait_watchdog': encoder_watchdog,
         'longest_gpu_part_ms': max([x['ms'] for x in gpu_part_long],default=None),
         'last_encoder_dispatch_cost_ms_per_frame': encoder_dispatch_cost[-1]['ms_per_frame'] if encoder_dispatch_cost else None,
