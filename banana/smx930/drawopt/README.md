@@ -35,3 +35,7 @@ Keep GPU driver PanVK faux123 v1.1.8 and resolution at the same values. The fast
 ## Memory caveats
 
 The v0.15 heavy-scene log observed ~2,913 MiB Vulkan allocations and 1,567 MiB `MemAvailable`, but no verified LMKD trace or tombstone. GPU-written live images and render target aliases must not be evicted or downscaled blindly. This patch does not change image residency and is not a confirmed OOM fix.
+
+## Verified CI artifact
+
+Native GitHub Actions run `44045122085` SUCCESS. `dev.nxnative.android.malig925draw` v0.16 artifact SHA256 `d0ea1fafa8e905857e8ff824816aa49ba257050a04706fd842ec0d8ccf489d88` (31,497,291 bytes), ZIP validated. CI validates native source compilation, **not** tablet GPU correctness, stability, FPS or kernel kill reason. Artifact in Drive ID `10oAzm_j7e-DpFQhC9v1jFT2ZM0rwASnV`. This separate app requires importing the previously exported v0.8/v0.12.1 shader pack or selecting the shared pack folder. The original PanVK driver must be imported or selected in this package as well.
