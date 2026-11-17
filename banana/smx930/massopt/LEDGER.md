@@ -47,5 +47,14 @@ After the first successful v0.12 native build, code review identified upstream r
 - Compare prior 15:14 prewarm ON: 3.7 FPS/236ms replay CPU, 2,845 MiB graphics, 196 underruns/600ms over 58,000 callbacks. Nonmatched run/caches prevent causality. Prewarm not sole crash cause.
 - Inspected exact `vka_exec.c`, `vka_enc.c`, `vka_pso.c` and `vka_dev.c`: safe per-slot pool opt-out `DM_VK_SLOT_POOL=0`, encoder wait 500ms log is observation not proof of deadlock; ADB exit cause needed.
 - Added analyzer regression for encoder waits, 200ms GPU parts, encoder dispatch time; 2 tests passed. No APK rebuild or shader retranslation. Next controlled comparison set prewarm OFF plus slot pool OFF.
+- Backed up v0.14 sanitized report, metrics, independent recovery settings, parser/tests and ledger to Google Drive `MassOpt_v012/`, ZIP ID 1IsEnw4htJpjrQTaNH4kwR-qGORX1uo0n.
+- Committed sanitized analyzer, two regression tests, report and A/B profile to existing GitHub branch (commit 78240e47b22441f7513f7a8065a5cb70a1bd0671).
+- First CI run 44033769239 failed solely because the new test imported from its own directory rather than `../tools`; existing 29 tests passed. Corrected test search path in commit 63c36cef9f4819c79d984801204ef7f6eab65fa8; GitHub Actions run 44033925380 completed SUCCESS. No native APK rebuild.
 
-- Drive v0.14 analysis backup completed, ZIP file ID 1IsEnw4htJpjrQTaNH4kwR-qGORX1uo0n; sanitized report and profile committed 78240e47b22441f7513f7a8065a5cb70a1bd0671. GitHub CI 44033769239 initial failure was test import path only (29 other tests passed); fixed test in commit 63c36cef9f4819c79d984801204ef7f6eab65fa8. New CI run 44033925380 SUCCESS. No APK rebuild or shader retranslation.
+## 2026-11-17 — Intro bypass discovered; remove 3-minute wait from A/B loop
+- User reported repeated unskippable 3-minute introduction. Inspected current pinned v0.12.1 source `dm/host/hle_codec_video.c`, `docs/reference/movies.md`, and game-specific OOT README.
+- Found existing opt-in `DM_MOVIE_SKIP=1`: second decoder and subsequent decoder streams report one early EOS at the fifth submitted packet and discard the remainder until Stop/Flush. OOT README names the AV1 opening as decoder 2+. Use `1`, **not** `all`, to avoid disrupting first decoder. Device success is *not yet verified*; some games abort on fabricated early EOS.
+- Verified actual built v0.12.1 APK embeds `DM_MOVIE_SKIP`, `session decoder`, and `ends its stream` in OOT native host library. No app rebuild and no shader repack needed.
+- Recommended test env `DM_MOVIE_SKIP=1`, `DM_VK_PREWARM=0`, `DM_VK_SLOT_POOL=0` for current slot-pool-only A/B; if bypass aborts, remove movie flag. Unaltered game and existing caches preserved.
+- Alternate validated game-flow: source OOT README describes loading user's own `Kokiri Forest Autosave` `slot_00/{progress,caption}.sav` from game menu to bypass first New Game movie. Save bytes not bundled or provided; do not claim available.
+- Wrote `smx930_intro_skip/INTRO_SKIP.md` with exact evidence, caveats and rollback. No physical device test or new APK this turn.
