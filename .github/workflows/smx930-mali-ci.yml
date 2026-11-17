@@ -86,32 +86,24 @@ jobs:
           sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
           echo "sdk.dir=$ANDROID_HOME" > source/banananative/android/app/local.properties
           echo "NDK path: $ANDROID_HOME/ndk/28.2.13676358"
-      - name: Build SM-X930 Mali G925 APK (separate app ID; all 10 profiles)
+      - name: Build SM-X930 Mali G925 APK (Ocarina of Time only)
         shell: bash
         run: |
           set -euo pipefail
           cd source/banananative/android/app
           chmod +x gradlew
           ./gradlew --no-daemon --max-workers=2 \
+            -PnxGames=0400486024DEC000 \
             -PnxApp=malig925lab \
             -PnxLabel="Banana Native SM-X930 Mali G925" \
-            -PnxVersion=0.3.40-mali-v0.6 \
-            -PnxVersionCode=34060 \
+            -PnxVersion=0.3.40-mali-v0.7 \
+            -PnxVersionCode=34070 \
             -PnxPackStage="$GITHUB_WORKSPACE/stage" \
             apk --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/out/build.log"
-          cp out/nxnative-android-malig925lab.apk "$GITHUB_WORKSPACE/out/banana-native-smx930-mali-v0.6.apk"
+          cp out/nxnative-android-malig925lab.apk "$GITHUB_WORKSPACE/out/banana-native-smx930-mali-v0.7.apk"
           cd "$GITHUB_WORKSPACE"
-          sha256sum out/banana-native-smx930-mali-v0.6.apk | tee out/apk-sha256.txt
-          unzip -tqq out/banana-native-smx930-mali-v0.6.apk
-      - name: Fetch optional experimental PanVK G925 driver
-        if: always()
-        shell: bash
-        run: |
-          set +e
-          URL='https://github.com/zenithblue-oss/panvk-kbase-android/releases/download/panvk-kbase-v26.3.1/Mesa-PanVK-Android-v26.3.1-795ca7ff-adrenotools.zip'
-          curl -fLsS --retry 2 --max-time 180 "$URL" -o out/PanVK-v26.3.1-adrenotools-G925-experimental.zip
-          echo '7e2e9987bbebefb06f52b2570e61e6208503d4d3a10a395b97aea9b6e1fad9e4  out/PanVK-v26.3.1-adrenotools-G925-experimental.zip' | sha256sum -c -
-          if [ "$?" -ne 0 ]; then rm -f out/PanVK-v26.3.1-adrenotools-G925-experimental.zip; fi
+          sha256sum out/banana-native-smx930-mali-v0.7.apk | tee out/apk-sha256.txt
+          unzip -tqq out/banana-native-smx930-mali-v0.7.apk
       - name: Capture source patch and build metadata
         if: always()
         shell: bash
@@ -125,15 +117,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: banana-native-smx930-mali-build-v06
+          name: banana-native-smx930-mali-build-v07
           path: |
-            out/banana-native-smx930-mali-v0.6.apk
+            out/banana-native-smx930-mali-v0.7.apk
             out/apk-sha256.txt
             out/build.log
             out/build-info.txt
             out/files.txt
             out/mali_patch_v0340.py
-            out/PanVK-v26.3.1-adrenotools-G925-experimental.zip
           if-no-files-found: warn
           retention-days: 3
           compression-level: 0
