@@ -108,7 +108,7 @@ jobs:
             -PnxVersionCode=34160 \
             -PnxPackStage="$GITHUB_WORKSPACE/stage" \
             apk --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/out/build.log"
-          cp out/nxnative-android-malig925mass.apk "$GITHUB_WORKSPACE/out/banana-native-smx930-drawopt-v0.16.0.apk"
+          cp out/nxnative-android-malig925drawopt.apk "$GITHUB_WORKSPACE/out/banana-native-smx930-drawopt-v0.16.0.apk"
           cd "$GITHUB_WORKSPACE"
           sha256sum out/banana-native-smx930-drawopt-v0.16.0.apk | tee out/apk-sha256.txt
           unzip -tqq out/banana-native-smx930-drawopt-v0.16.0.apk
