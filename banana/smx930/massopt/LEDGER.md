@@ -16,3 +16,9 @@ Pending: synthetic/source regression, GitHub CI native build and actual tablet v
 Added portable pinned-source CI tests (6 pass), Java startup tests (pass) and a source-grounded README. Tests check command-pool reset only after slot fence, bounded memory-guarded prewarm, no deletion of host access barrier, and bounded trace. Native Android compile still pending.
 
 After the first successful v0.12 native build, code review identified upstream reuse of command buffers even after a 6s GPU-fence timeout; per-slot pool resets would then be invalid. Added v0.12.1 Mali-only failure guards for unsuccessful fence/timeline retirement (retains upstream fallback when DM_VK_SLOT_POOL=0), a targeted seventh regression, and will rebuild. Existing v0.12 should be superseded for device tests.
+
+## 2026-11-17 — reuse already prepared shaders across APKs
+- Inspected source PackUi, PackZip, AppStorage, PackFind, Folders, BuildConfig shader chain and v0.8 device log. Old 42,848-shader, 695.6 MB lib is in app data (not APK), `shaders/v-19662e4c4a25/dmsh_vk.lib`; same chain expected in v0.12.1.
+- Confirmed v0.8 Game → Storage → Export pack and v0.12.1 Game → Storage → Import pack (ZIP) copy and validate complete pack, including the built shader library; no shader retranslation. The export omits `shaders/layer` and the GPU driver's `DM_TEMP/vk_pipelines*.bin` native pipeline cache.
+- Alternative future-proof single shared pack folder: export ZIP once, extract to public `Download/games/0400486024DEC000-work/android-pack`, pick under game's Storage → Folders. Avoid simultaneous writers and retain old app until confirmed.
+- Uploaded migration document to Google Drive ID 1EEvmY0EYaUI0OsVNp97-1_9JonU-1y5m, committed GitHub guide `banana/smx930/SHADER_MIGRATION.md`. Future CI needs a persistent signing key plus stable package ID for in-place updates to retain caches; never commit private keys.
