@@ -47,3 +47,5 @@ After the first successful v0.12 native build, code review identified upstream r
 - Compare prior 15:14 prewarm ON: 3.7 FPS/236ms replay CPU, 2,845 MiB graphics, 196 underruns/600ms over 58,000 callbacks. Nonmatched run/caches prevent causality. Prewarm not sole crash cause.
 - Inspected exact `vka_exec.c`, `vka_enc.c`, `vka_pso.c` and `vka_dev.c`: safe per-slot pool opt-out `DM_VK_SLOT_POOL=0`, encoder wait 500ms log is observation not proof of deadlock; ADB exit cause needed.
 - Added analyzer regression for encoder waits, 200ms GPU parts, encoder dispatch time; 2 tests passed. No APK rebuild or shader retranslation. Next controlled comparison set prewarm OFF plus slot pool OFF.
+
+- Drive v0.14 analysis backup completed, ZIP file ID 1IsEnw4htJpjrQTaNH4kwR-qGORX1uo0n; sanitized report and profile committed 78240e47b22441f7513f7a8065a5cb70a1bd0671. GitHub CI 44033769239 initial failure was test import path only (29 other tests passed); fixed test in commit 63c36cef9f4819c79d984801204ef7f6eab65fa8. New CI run 44033925380 SUCCESS. No APK rebuild or shader retranslation.
