@@ -1,0 +1,49 @@
+name: Banana Native Mali G925 source and build probe
+on:
+  push:
+    branches:
+      - banana-mali-g925-20261117
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Capture official pinned source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out source
+          URL="https://git.eden-emu.dev/moceure/BananaNative/archive/e6b6f0d07a.zip"
+          curl --fail --location --retry 3 --retry-delay 3 --connect-timeout 30 \
+            --max-time 1000 "$URL" -o out/BananaNative-e6b6f0d07a.zip
+          unzip -tqq out/BananaNative-e6b6f0d07a.zip
+          sha256sum out/BananaNative-e6b6f0d07a.zip | tee out/source-sha256.txt
+          unzip -q out/BananaNative-e6b6f0d07a.zip -d source
+          ROOT="$(find source -mindepth 1 -maxdepth 1 -type d | head -1)"
+          printf '%s\n' "$ROOT" >out/root.txt
+          {
+            echo 'Source tag pinned: e6b6f0d07a'
+            echo '=== Source root listing ==='
+            ls -la "$ROOT" | head -100
+            echo '=== Android / build files ==='
+            find "$ROOT" -maxdepth 5 -type f \( -name 'gradlew' -o -name 'CMakeLists.txt' -o -name 'build.gradle' -o -name 'build.gradle.kts' -o -name 'README.md' -o -name 'settings.gradle' -o -name 'settings.gradle.kts' \) | head -120
+            echo '=== Android toolchains ==='
+            env | grep -i android | head -30 || :
+            command -v ninja || :
+            command -v cmake || :
+            echo '=== README 150 lines ==='
+            sed -n '1,150p' "$ROOT/README.md" || :
+          } > out/probe.txt 2>&1
+          cat out/probe.txt
+      - name: Upload source archive and probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: banana-v0340-source-and-probe
+          path: out/
+          if-no-files-found: warn
+          retention-days: 2
+          compression-level: 0
