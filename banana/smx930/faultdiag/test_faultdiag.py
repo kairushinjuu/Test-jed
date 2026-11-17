@@ -3,7 +3,7 @@ from pathlib import Path
 import subprocess
 import unittest
 ROOT=Path(os.environ.get('FAULTDIAG_SOURCE_ROOT',str(Path(__file__).resolve().parents[1]/'source')))
-PATCH=Path(__file__).resolve().parents[1]/'patches/apply_faultdiag.py'
+PATCH=Path(__file__).resolve().parent/'apply_faultdiag.py'
 class FaultDiagTest(unittest.TestCase):
  def test_evict_optout_and_default(self):
   s=(ROOT/'dm/gfx/vk_android/vka_fileback.h').read_text()
