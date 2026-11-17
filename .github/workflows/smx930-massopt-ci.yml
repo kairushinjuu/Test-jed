@@ -1,10 +1,5 @@
 name: SM-X930 MassOpt v0.12.1 native source and APK
 on:
-  push:
-    branches: [banana-mali-g925-20261117]
-    paths:
-      - 'banana/smx930/massopt/**'
-      - '.github/workflows/smx930-massopt-ci.yml'
   workflow_dispatch:
 permissions:
   contents: read
