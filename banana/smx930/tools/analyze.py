@@ -30,6 +30,11 @@ PACE_GPU = re.compile(r'pace up to frame (\d+).*?GPU busy p50/p90 ([\d.]+)/([\d.
 LONGFRAME = re.compile(r'\[longframe\] frame (\d+) \(([\d.]+) s\) whole frame ([\d.]+) ms')
 FENCE_WAIT = re.compile(r'waits: GPU fences ([\d.]+)')
 AAUDIO_OPEN = re.compile(r'AAudio stream: (\d+) Hz,.*?burst (\d+) frames, buffer (\d+) frames \(asked (\d+)\)')
+# Scene-transition measurements (pacing windows are observations, not true wall-clock FPS samples).
+PACE_SCENE = re.compile(r'pace up to frame (\d+) \(.*?\): .*?; ([\d.]+) fps; GPU busy p50/p90 ([\d.]+)/([\d.]+) ms.*?replay recording ([\d.]+) ms a frame')
+NEW_PSO = re.compile(r'new pipelines (\d+) \+ shader libraries (\d+), ([\d.]+) ms in all')
+UPLOAD = re.compile(r'texture uploads (\d+) first \+ (\d+) re-uploads, ([\d.]+) MB / ([\d.]+) ms')
+FAULTS = re.compile(r'page faults (\d+) major / (\d+) minor')
 
 def parse(text: str, digest: str = '') -> dict:
     lines = text.splitlines()
@@ -55,6 +60,7 @@ def parse(text: str, digest: str = '') -> dict:
     longframes = []
     aaudio_open = []
     codec_ahead = 0
+    scene_windows = []
     for i, s in enumerate(lines):
         m = FPS.search(s)
         if m: fps_samples.append({'line': i+1, 'fps': float(m[1]), 'phase': 'intro' if intro_end is not None and i < intro_end else 'post_intro' if intro_end is not None else 'unclassified'})
@@ -77,15 +83,23 @@ def parse(text: str, digest: str = '') -> dict:
         if m := AUDIO_WINDOW.search(s): audio_samples.append({'line':i+1,'callback':int(m[1]),'underruns':int(m[2]),'silence_ms':float(m[3])})
         if m := PACE_COST.search(s): pace_submit_ms.append(float(m[2]))
         if m := PACE_GPU.search(s): pace_gpu_ms.append(float(m[2]))
+        if m := PACE_SCENE.search(s):
+            scene_windows.append({'line':i+1,'frame':int(m[1]),'fps':float(m[2]),'gpu_p50_ms':float(m[3]),'gpu_p90_ms':float(m[4]),'replay_record_ms':float(m[5]),
+                                  'phase':'after_movie_end' if intro_end is not None and i > intro_end else 'movie_or_unknown'})
         if m := LONGFRAME.search(s):
             mw = FENCE_WAIT.search(s)
-            longframes.append({'line':i+1,'frame':int(m[1]),'seconds':float(m[2]),'whole_ms':float(m[3]),'gpu_fence_wait_ms':float(mw[1]) if mw else None})
+            pso = NEW_PSO.search(s); upload = UPLOAD.search(s); faults = FAULTS.search(s)
+            longframes.append({'line':i+1,'frame':int(m[1]),'seconds':float(m[2]),'whole_ms':float(m[3]),'gpu_fence_wait_ms':float(mw[1]) if mw else None,
+                               'new_pipelines':int(pso[1]) if pso else None,'pipeline_creation_ms':float(pso[3]) if pso else None,
+                               'upload_mb':float(upload[3]) if upload else None,'upload_ms':float(upload[4]) if upload else None,
+                               'major_faults':int(faults[1]) if faults else None,'minor_faults':int(faults[2]) if faults else None})
         if m := AAUDIO_OPEN.search(s): aaudio_open.append({'rate_hz':int(m[1]),'burst_frames':int(m[2]),'buffer_frames':int(m[3]),'requested_frames':int(m[4])})
         if '[codec] AV1 decoder' in s and 'packet refused (busy)' in s: codec_ahead += 1
     driver = next((m[1] for s in lines if (m:=DRIVER.search(s))), None)
     gpu = next((m[1] for s in lines if (m:=DEVICE.search(s))), None)
     phase_fps = lambda name: [x['fps'] for x in fps_samples if x['phase'] == name]
     play = phase_fps('post_intro')
+    post_scene_windows = [x for x in scene_windows if x['phase']=='after_movie_end']
     n_drop = sum(x['dropped'] for x in onscreen)
     n_seen = sum(x['frames'] for x in onscreen)
     post_stats = [x for x in onscreen if x['phase'] == 'post_intro']
@@ -105,6 +119,8 @@ def parse(text: str, digest: str = '') -> dict:
     if sum(a['underruns'] for a in audio_samples) > 0: flags.append('AUDIO_BUFFER_UNDERRUNS_OBSERVED')
     if longframes and max(x['whole_ms'] for x in longframes) >= 100: flags.append('LONG_FRAME_STALL_OVER_100MS')
     if pace_submit_ms and statistics.median(pace_submit_ms) >= 5: flags.append('CPU_DRIVER_SUBMIT_TIME_OVER_5MS_PER_FRAME')
+    if any(x['gpu_p50_ms'] >= 50 for x in post_scene_windows): flags.append('GAMEPLAY_TRANSITION_GPU_OVER_50MS')
+    if any(x['pipeline_creation_ms'] is not None and x['pipeline_creation_ms'] >= 10000 for x in longframes): flags.append('SCENE_TRANSITION_PIPELINES_OVER_10S')
     def rnd(x): return round(x, 2) if x is not None else None
     # We never claim a pass with fewer than 10 observations after the intro.
     play_median = statistics.median(play) if play else None
@@ -117,7 +133,7 @@ def parse(text: str, digest: str = '') -> dict:
         'target_hardware':'Samsung SM-X930 / Immortalis Mali-G925 MC12',
         'target_fps': TARGET,
         'game_title_id': TARGET_ID,
-        'gpu':gpu, 'driver':driver, 'build':build, 'environment': {k: env_values.get(k) for k in ('DM_GRAPHICS_SCALE','DM_ROMFS_OVERLAY','DM_VK_NDSR','DM_VK_PSO_SLOTS','DM_VK_PREWARM','DM_VK_IMG_RESERVE_MB','DM_MEM_FILEBACK','DM_VK_TL_HOST','DM_DBG_AU_FRAMES','DM_CODEC_STATS')}, 'log_lines':len(lines),
+        'gpu':gpu, 'driver':driver, 'build':build, 'environment': {k: env_values.get(k) for k in ('DM_GRAPHICS_SCALE','DM_ROMFS_OVERLAY','DM_VK_NDSR','DM_VK_PSO_SLOTS','DM_VK_PREWARM','DM_VK_IMG_RESERVE_MB','DM_MEM_FILEBACK','DM_MEM_FILEBACK_KINDS','DM_VK_PSO_ASYNC','DM_VK_TL_HOST','DM_DBG_AU_FRAMES','DM_CODEC_STATS')}, 'log_lines':len(lines),
         'swapchain_successes':swapchain_ok,'invalid_external_handle_errors':swapchain_fail,
         'intro_complete':intro_end is not None, 'intro_fps_median':rnd(statistics.median(phase_fps('intro'))) if phase_fps('intro') else None,
         'post_intro_fps_samples':len(play), 'post_intro_median_fps':rnd(play_median), 'post_intro_p10_fps':rnd(play_p10),
@@ -134,11 +150,14 @@ def parse(text: str, digest: str = '') -> dict:
         'median_vk_queue_submit_cpu_ms_per_frame': rnd(statistics.median(pace_submit_ms)) if pace_submit_ms else None,
         'median_gpu_busy_p50_ms': rnd(statistics.median(pace_gpu_ms)) if pace_gpu_ms else None,
         'worst_longframe': max(longframes,key=lambda x:x['whole_ms'],default=None),
+        'after_movie_scene_windows':post_scene_windows[-4:],
+        'last_tracked_graphics_allocation_mib':mem[-1]['total_mib'] if mem else None,
+        'last_tracked_image_allocation_mib':mem[-1]['images_mib'] if mem else None,
         'logged_busy_av1_input_notices': codec_ahead,
         'max_onscreen_footprint_mib': max((x['footprint_mib'] for x in onscreen),default=None),
         'presented_frames_from_window_stats':n_seen,
         'dropped_frames_from_window_stats':n_drop,
-        'observed_drop_ratio':rnd(n_drop/(n_seen+n_drop)) if n_seen+n_drop else None,
+        'observed_drop_ratio':round(n_drop/(n_seen+n_drop),4) if n_seen+n_drop else None,
         'highest_window_p99_ms':max([x['p99_ms'] for x in onscreen],default=None),
         'post_intro_window_p99_ms':post_p99,'post_intro_dropped_ratio':rnd(post_ratio),
         'median_simulation_time_ratio':rnd(statistics.median(time_ratios)) if time_ratios else None,
@@ -149,7 +168,7 @@ def parse(text: str, digest: str = '') -> dict:
 
 def markdown(m:dict) -> str:
     def v(k): return str(m.get(k)) if m.get(k) is not None else 'not measured'
-    rows=[('Driver',v('driver')),('Successful swapchains',v('swapchain_successes')),('Invalid external handle errors',v('invalid_external_handle_errors')),('Intro complete',v('intro_complete')),('Intro median FPS',v('intro_fps_median')),('Gameplay FPS observations',v('post_intro_fps_samples')),('Gameplay median FPS',v('post_intro_median_fps')),('Gameplay p10 FPS',v('post_intro_p10_fps')),('Peak Vulkan tracked allocations MiB',v('peak_graphics_allocation_mib')),('Minimum MemAvailable MiB',v('minimum_mem_available_mib')),('Longest pipeline compile ms',v('longest_pipeline_compile_ms')),('Audio callback underruns',v('audio_underflow_events')),('Inserted silence, ms',v('audio_zero_padded_ms')),('Median vkQueueSubmit CPU ms / frame',v('median_vk_queue_submit_cpu_ms_per_frame')),('GPU median busy p50 ms',v('median_gpu_busy_p50_ms')),('Worst longframe',v('worst_longframe')),('Observed dropped-frame ratio',v('observed_drop_ratio')),('Target met',v('target_met_on_observed_gameplay'))]
+    rows=[('Driver',v('driver')),('Successful swapchains',v('swapchain_successes')),('Invalid external handle errors',v('invalid_external_handle_errors')),('Intro complete',v('intro_complete')),('Intro median FPS',v('intro_fps_median')),('Gameplay FPS observations',v('post_intro_fps_samples')),('Gameplay median FPS',v('post_intro_median_fps')),('Gameplay p10 FPS',v('post_intro_p10_fps')),('Peak Vulkan tracked allocations MiB',v('peak_graphics_allocation_mib')),('Minimum MemAvailable MiB',v('minimum_mem_available_mib')),('Longest pipeline compile ms',v('longest_pipeline_compile_ms')),('Audio callback underruns',v('audio_underflow_events')),('Inserted silence, ms',v('audio_zero_padded_ms')),('Median vkQueueSubmit CPU ms / frame',v('median_vk_queue_submit_cpu_ms_per_frame')),('GPU median busy p50 ms',v('median_gpu_busy_p50_ms')),('Worst longframe',v('worst_longframe')),('After-movie scene pacing windows',v('after_movie_scene_windows')),('Last tracked graphics MiB',v('last_tracked_graphics_allocation_mib')),('Observed dropped-frame ratio',v('observed_drop_ratio')),('Target met',v('target_met_on_observed_gameplay'))]
     return '# SM-X930 / Mali-G925 benchmark\n\n| Metric | Value |\n|---|---|\n'+'\n'.join('| '+a.replace('|','/')+' | '+b.replace('|','/')+' |' for a,b in rows)+'\n\n**Flags:** '+', '.join(m['flags'])+'\n\n'+m['caveat']+'\n'
 
 if __name__=='__main__':

@@ -1,0 +1,57 @@
+{
+  "target_hardware": "Samsung SM-X930 / Immortalis Mali-G925 MC12",
+  "target_fps": 50.0,
+  "intro_complete": true,
+  "intro_fps_median": 30.0,
+  "post_intro_fps_samples": 1,
+  "after_movie_scene_windows": [
+    {
+      "line": 1784,
+      "frame": 10343,
+      "fps": 3.6,
+      "gpu_p50_ms": 1.5,
+      "gpu_p90_ms": 2.4,
+      "replay_record_ms": 255.6,
+      "phase": "after_movie_end"
+    },
+    {
+      "line": 1819,
+      "frame": 10367,
+      "fps": 4.8,
+      "gpu_p50_ms": 70.0,
+      "gpu_p90_ms": 115.0,
+      "replay_record_ms": 165.0,
+      "phase": "after_movie_end"
+    }
+  ],
+  "last_tracked_graphics_allocation_mib": 3130,
+  "last_tracked_image_allocation_mib": 1809,
+  "audio_underflow_events": 565,
+  "audio_zero_padded_ms": 1645.0,
+  "worst_longframe": {
+    "line": 1800,
+    "frame": 10343,
+    "seconds": 376.74,
+    "whole_ms": 27312.1,
+    "gpu_fence_wait_ms": 27211.7,
+    "new_pipelines": 72,
+    "pipeline_creation_ms": 24577.1,
+    "upload_mb": 321.6,
+    "upload_ms": 924.2,
+    "major_faults": 26078,
+    "minor_faults": 1897258
+  },
+  "digest_oom_classification": true,
+  "flags": [
+    "APP_DIGEST_REPORTS_OOM_NOT_PROVEN_BY_LOG",
+    "INSUFFICIENT_GAMEPLAY_FPS_SAMPLES",
+    "GRAPHICS_ALLOCATIONS_OVER_2400_MIB",
+    "LONG_SHADER_COMPILATION",
+    "AUDIO_BUFFER_UNDERRUNS_OBSERVED",
+    "LONG_FRAME_STALL_OVER_100MS",
+    "CPU_DRIVER_SUBMIT_TIME_OVER_5MS_PER_FRAME",
+    "GAMEPLAY_TRANSITION_GPU_OVER_50MS",
+    "SCENE_TRANSITION_PIPELINES_OVER_10S"
+  ],
+  "target_met_on_observed_gameplay": false
+}
