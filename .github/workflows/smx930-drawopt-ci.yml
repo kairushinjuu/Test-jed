@@ -102,19 +102,19 @@ jobs:
           chmod +x gradlew
           ./gradlew --no-daemon --max-workers=2 \
             -PnxGames=0400486024DEC000 \
-            -PnxApp=malig925mass \
-            -PnxLabel="Banana Native SM-X930 DrawOpt" \
+            -PnxApp=malig925drawopt \
+            -PnxLabel="Banana Native SM-X930 DrawOpt (isolated)" \
             -PnxVersion=0.3.40-mali-v0.16.0 \
             -PnxVersionCode=34160 \
             -PnxPackStage="$GITHUB_WORKSPACE/stage" \
             apk --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/out/build.log"
-          cp out/nxnative-android-malig925mass.apk "$GITHUB_WORKSPACE/out/banana-native-smx930-mali-v0.16.0.apk"
+          cp out/nxnative-android-malig925mass.apk "$GITHUB_WORKSPACE/out/banana-native-smx930-drawopt-v0.16.0.apk"
           cd "$GITHUB_WORKSPACE"
-          sha256sum out/banana-native-smx930-mali-v0.16.0.apk | tee out/apk-sha256.txt
-          unzip -tqq out/banana-native-smx930-mali-v0.16.0.apk
+          sha256sum out/banana-native-smx930-drawopt-v0.16.0.apk | tee out/apk-sha256.txt
+          unzip -tqq out/banana-native-smx930-drawopt-v0.16.0.apk
           python3 - <<'PY'
           import zipfile, io, pathlib, sys, tempfile, importlib.util
-          apk="out/banana-native-smx930-mali-v0.16.0.apk"
+          apk="out/banana-native-smx930-drawopt-v0.16.0.apk"
           with zipfile.ZipFile(apk) as a:
               with zipfile.ZipFile(io.BytesIO(a.read("assets/pack/tools.zip"))) as z:
                   assert "scripts/pack_dump.py" in z.namelist()
@@ -145,9 +145,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: banana-native-smx930-mali-build-v016
+          name: banana-native-smx930-drawopt-build-v016
           path: |
-            out/banana-native-smx930-mali-v0.16.0.apk
+            out/banana-native-smx930-drawopt-v0.16.0.apk
             out/apk-sha256.txt
             out/build.log
             out/build-info.txt
