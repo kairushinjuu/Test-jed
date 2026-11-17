@@ -41,6 +41,10 @@ PREWARM_FLOOR = re.compile(r'Mali prewarm: stopped at (\d+) MiB MemAvailable \(f
 PIPELINE_CACHE_SAVED = re.compile(r'pipeline cache: (\d+) bytes written .*?\((\d+) pipelines made this run\)')
 REPLAY_CPU = re.compile(r'replay recording [\d.]+ ms a frame \(its CPU ([\d.]+)\)')
 REPLAY_OTHER = re.compile(r'pace cost up to frame .*?other records ([\d.]+)')
+ENC_WATCHDOG = re.compile(r'command encoder: the replay thread has waited ([\d.]+) s for the encoder')
+GPU_PART_LONG = re.compile(r'GPU time: a part ran ([\d.]+) ms')
+ENC_DISPATCH_COST = re.compile(r'encoder calls ms \(count\):.*?dispatches ([\d.]+) \(\d+\)')
+
 
 
 def parse(text: str, digest: str = '') -> dict:
@@ -70,6 +74,7 @@ def parse(text: str, digest: str = '') -> dict:
     scene_windows = []
     pw_progress = []; pw_floors = []; saved_pipelines = []; replay_other = []
     audio_disconnections = 0
+    encoder_watchdog=[]; gpu_part_long=[]; encoder_dispatch_cost=[]
     for i, s in enumerate(lines):
         m = FPS.search(s)
         if m: fps_samples.append({'line': i+1, 'fps': float(m[1]), 'phase': 'intro' if intro_end is not None and i < intro_end else 'post_intro' if intro_end is not None else 'unclassified'})
@@ -96,6 +101,9 @@ def parse(text: str, digest: str = '') -> dict:
         if m := PREWARM_FLOOR.search(s): pw_floors.append({'available_mib':int(m[1]),'threshold_mib':int(m[2])})
         if m := PIPELINE_CACHE_SAVED.search(s): saved_pipelines.append({'bytes':int(m[1]),'made_in_run':int(m[2])})
         if 'AAUDIO_STREAM_STATE_DISCONNECTED' in s: audio_disconnections += 1
+        if m := ENC_WATCHDOG.search(s): encoder_watchdog.append({'line':i+1,'wait_s':float(m[1])})
+        if m := GPU_PART_LONG.search(s): gpu_part_long.append({'line':i+1,'ms':float(m[1])})
+        if m := ENC_DISPATCH_COST.search(s): encoder_dispatch_cost.append({'line':i+1,'ms_per_frame':float(m[1])})
         if m := REPLAY_OTHER.search(s): replay_other.append({'line':i+1,'other_records_ms':float(m[1])})
         if m := PACE_SCENE.search(s):
             scene_windows.append({'line':i+1,'frame':int(m[1]),'fps':float(m[2]),'gpu_p50_ms':float(m[3]),'gpu_p90_ms':float(m[4]),'replay_record_ms':float(m[5]),'replay_cpu_ms':float(REPLAY_CPU.search(s)[1]) if REPLAY_CPU.search(s) else None,
@@ -129,6 +137,8 @@ def parse(text: str, digest: str = '') -> dict:
     if digest_oom: flags.append('APP_DIGEST_REPORTS_OOM_NOT_PROVEN_BY_LOG')
     if digest_android_closed_unknown: flags.append('ANDROID_CLOSED_CAUSE_UNCONFIRMED')
     if audio_disconnections: flags.append('AUDIO_STREAM_DISCONNECTED')
+    if encoder_watchdog: flags.append('COMMAND_ENCODER_WAIT_OVER_500MS')
+    if gpu_part_long: flags.append('GPU_PART_OVER_200MS')
     if pw_floors: flags.append('PREWARM_STOPPED_AT_RAM_FLOOR')
     if intro_end is None: flags.append('INTRO_END_NOT_OBSERVED')
     if len(play) < 10: flags.append('INSUFFICIENT_GAMEPLAY_FPS_SAMPLES')
@@ -167,6 +177,9 @@ def parse(text: str, digest: str = '') -> dict:
         'audio_zero_padded_ms': rnd(sum(x['silence_ms'] for x in audio_samples)) if audio_samples else None,
         'aaudio_stream': aaudio_open[-1] if aaudio_open else None,
         'aaudio_disconnections': audio_disconnections,
+        'encoder_wait_watchdog': encoder_watchdog,
+        'longest_gpu_part_ms': max([x['ms'] for x in gpu_part_long],default=None),
+        'last_encoder_dispatch_cost_ms_per_frame': encoder_dispatch_cost[-1]['ms_per_frame'] if encoder_dispatch_cost else None,
         'massopt_prewarm_progress': pw_progress[-1] if pw_progress else None,
         'massopt_prewarm_stop': pw_floors[-1] if pw_floors else None,
         'massopt_saved_pipeline_cache': saved_pipelines[-1] if saved_pipelines else None,
