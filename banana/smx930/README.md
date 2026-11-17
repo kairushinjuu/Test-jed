@@ -33,7 +33,7 @@
 
 ## Start-to-finish experiment sequence
 
-1. **Keep v0.5 and your shader cache.** Record a reference run on faux123 v1.1.8 using the `10-stability.env` settings. Launch and collect the full exported log and digest. Test on battery >50%, unplugged, at a repeatable cool starting temperature, fixed screen brightness and unchanged resolution.
+1. **Preserve the installed v0.8 and its completed 42,848-shader cache** (keep v0.5 as an older independent comparison). Record a reference run on faux123 v1.1.8 using the `40-intro-baseline.env` settings. Launch and collect the full exported log and digest. Test on battery >50%, unplugged, at a repeatable cool starting temperature, fixed screen brightness and unchanged resolution.
 2. **First objective = survive the intro and save.** A log that reaches the gameplay area, remains responsive for 10 minutes and has no crash/tombstone earns a stability pass. Collect three such sessions; be consistent about intro skipping or using the same save point.
 3. **Second objective = warm, comparable five-minute gameplay benchmark.** Log at least 10 distinct gameplay FPS observations. Treat 20 ms as the 50-FPS target. Acceptance: median ≥50 FPS, p10 ≥45 FPS, post-intro p99 display interval ≤40 ms and dropped frames ≤3%, with **no crash**. This is a project-specific engineering gate, not a guarantee of perfectly constant 50 FPS.
 4. **Third objective = quality check.** Compare screenshots of the same camera position and scene at 540p performance then 720p balanced. Inspect text legibility, vegetation, shadows, LOD, motion, and missing geometry; don't accept broken visuals to win a few frames.
@@ -59,3 +59,11 @@ The GitHub Actions build assembles the pinned official `e6b6f0d07a` source + exi
 The test package ID is `dev.nxnative.android.malig925lab` (separate from `dev.nxnative.android.malig925` v0.5), so the existing app/game cache remains untouched. Different CI runs use ephemeral debug signing keys; future builds under the *same* lab package ID may require uninstall/reinstall unless an independently secured persistent signing setup is adopted. Never publish a private signing key into a public repository.
 
 **Limit:** CI can compile, lint, test profiles and analyze logs, but cannot test actual Mali frame pacing or quality without device execution. The remaining GPU experiments require the attached Tab S11 Ultra.
+
+## 2026-11-17 13:35 SM-X930 v0.8 intro A/B campaign
+
+The completed 42,848-shader library removed the previous preparation failure, but the current intro still has 101 AAudio underruns (375 ms inserted silence), 94 dropped presentation frames across seven observation windows, and a 1,364 ms GPU-fence stall. Shader work is not the recurring bottleneck: measured Vulkan CPU queue-submit cost is 9.8 ms/frame while the GPU reports ~2.2 ms busy. Full report: `reports/v08-20261117-133558.md`; machine-readable summary: `.json`.
+
+To test without reinstalling the APK or losing shader caches, copy **one** of `profiles/40-intro-baseline.env`, `41-intro-host-timeline.env`, `42-intro-audio-buffer.env` into **Game settings → Advanced → Extra environment**. The timeline and audio profiles are alternative A/B experiments, **not simultaneous settings**. Driver and resolution should remain unchanged. `DM_CODEC_STATS=1` is diagnostic and common to all three.
+
+Use `python3 tools/analyze.py <exported.log> --json run.json --md run.md` and compare matching experimental runs. The report never promotes 30 FPS movie data to 50 FPS gameplay success. No device credentials, game dump, or original user log should be committed to the public GitHub test repository.

@@ -1,0 +1,40 @@
+name: SM-X930 Mali log-analysis regression
+on:
+  push:
+    branches: [banana-mali-g925-20261117]
+    paths:
+      - 'banana/smx930/tools/**'
+      - 'banana/smx930/tests/**'
+      - 'banana/smx930/profiles/**'
+      - 'banana/smx930/reports/**'
+      - '.github/workflows/smx930-analysis-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run non-device log parsers, A/B and shader import tests
+        run: |
+          python3 -m unittest discover -s banana/smx930/tests -v
+          python3 banana/smx930/tools/analyze.py banana/smx930/tests/fixtures/faux-intro.log --json /tmp/smx930-fixture.json
+          python3 - <<'PY'
+          import json
+          x=json.load(open('/tmp/smx930-fixture.json'))
+          assert not x['target_met_on_observed_gameplay']
+          assert x['intro_complete']
+          print('PASS: 30-FPS intro cannot qualify as 50-FPS gameplay')
+          PY
+      - name: Verify no raw user device log is committed
+        run: |
+          if find banana/smx930 -type f \( -iname 'nxnative*.log*' -o -iname '0400486024DEC000-*.log.txt' \) | grep .; then
+             echo 'Raw user logs are private and must not be published'
+             exit 1
+          fi
+          echo 'PASS: no raw device log in repository'

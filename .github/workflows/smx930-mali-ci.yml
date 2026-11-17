@@ -1,10 +1,5 @@
 name: SM-X930 Mali-G925 isolated validation and APK
 on:
-  push:
-    branches: [banana-mali-g925-20261117]
-    paths:
-      - 'banana/smx930/**'
-      - '.github/workflows/smx930-mali-ci.yml'
   workflow_dispatch:
 permissions:
   contents: read

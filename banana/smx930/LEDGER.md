@@ -11,3 +11,22 @@
 - Added read-only ADB collector for 600 s sample, model checked, battery/thermal/meminfo/logcat; no root.
 - Added baseline/stability/balanced/quality env profiles and acceptance/quality gates; no shader cache deletion.
 - Pending GitHub CI integration, cloud Android compilation, and physical-device verification.
+
+## 2026-11-17 12:14 JST — v0.7 preparation error
+- User image showed `ModuleNotFoundError: No module named 'pack_dump' (shader_split.py:3704)` at 6% / 42,848 shaders while preparing Ocarina of Time in the lab app.
+- Opened full upstream+patched source ZIP and inspected v0.7 APK. `assets/pack/tools.zip` contains both `dm/gfx/tools/shader_split.py` and `scripts/pack_dump.py`; the problem is not an omitted module.
+- Found `shader_split.py:3703` inserts `../../scripts` relative to `dm/gfx/tools`, erroneously resolving to `dm/scripts`; corrected to `../../../scripts`, resolving to package-root `scripts`.
+- Added exact-anchor fail-closed patch `source_patch/fix_pack_dump_import.py` and regression `tests/test_pack_dump_import.py`; full local Python regression suite passes (13 tests); confirmed a corrected real v0.7 tools.zip import resolves `pack_dump`.
+- Next: integrate with CI, build/verify v0.8, upload APK and checkpoints; do not discard previous v0.5 shader cache or user game data.
+
+## 2026-11-17 13:39 JST — v0.8 on-device intro log follow-up
+
+- Identified user-uploaded private Drive log `nxnative log 0400486024DEC000-20261117-133558.log` (size 140625 bytes), fetched it through the authenticated Drive connector and decoded with UTF-8 replacement for one malformed sequence.
+- Verified v0.8 app, SM-X930, PanVK faux123 v1.1.8, full 42848-shader library, successful swapchain, user-initiated stop. No confirmed gameplay FPS, no observed LMKD.
+- Parsed 837 lines: 1731 on-screen, 94 dropped (5.15%); 101 AAudio underruns / 375 ms zero fill; median per-window queue-submit CPU 9.8 ms/frame, GPU busy 2.2 ms; worst 1364.4 ms frame, GPU fences 1330.8 ms; no current PSI pressure.
+- Inspected pinned v0.8 sources `dm/host/hle_audio.c`, `hle_codec_video.c`, `dm/gfx/vk_android/vka_dev.c`, `vka_exec.c`, `hle_fpslock.c`: existing experimental flags `DM_VK_TL_HOST`, `DM_DBG_AU_FRAMES`, `DM_CODEC_STATS`; their correct semantics checked in source.
+- Upgraded stdlib log parser with AAudio/device callback, per-frame CPU queue-submit and GPU cost, longframe/fence cost, memory footprint, AV1 busy notices and environment toggles.
+- Added independent introductory A/B profiles and 3 new tests. Full test suite: 16 passing. Added comparator guard against changing multiple perf variables simultaneously.
+- Safest immediate follow-up: v0.8 unchanged, a baseline intro run with DM_CODEC_STATS=1, an isolated DM_VK_TL_HOST=1 run, then (separately) a 5760-frame AAudio buffer run; compare exported logs.
+- Do not bake host timeline changes into the APK until measured; changing the app signature would require reinstallation and loss of newly prepared 695.6 MB shader cache.
+- Pending GitHub test-run and Drive backup (record tool results below).
