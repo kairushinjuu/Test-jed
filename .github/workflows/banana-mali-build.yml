@@ -69,14 +69,14 @@ jobs:
           ./gradlew --no-daemon --max-workers=2 \
             -PnxApp=malig925 \
             -PnxLabel="Banana Native Mali G925" \
-            -PnxVersion=0.3.40-mali-v0.4 \
-            -PnxVersionCode=34041 \
+            -PnxVersion=0.3.40-mali-v0.5 \
+            -PnxVersionCode=34042 \
             -PnxPackStage="$GITHUB_WORKSPACE/stage" \
             apk --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/out/build.log"
-          cp out/nxnative-android-malig925.apk "$GITHUB_WORKSPACE/out/banana-native-mali-g925-v0.4.apk"
+          cp out/nxnative-android-malig925.apk "$GITHUB_WORKSPACE/out/banana-native-mali-g925-v0.5.apk"
           cd "$GITHUB_WORKSPACE"
-          sha256sum out/banana-native-mali-g925-v0.4.apk | tee out/apk-sha256.txt
-          unzip -tqq out/banana-native-mali-g925-v0.4.apk
+          sha256sum out/banana-native-mali-g925-v0.5.apk | tee out/apk-sha256.txt
+          unzip -tqq out/banana-native-mali-g925-v0.5.apk
       - name: Fetch optional experimental PanVK G925 driver
         if: always()
         shell: bash
@@ -99,9 +99,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: banana-native-mali-g925-build-v04
+          name: banana-native-mali-g925-build-v05
           path: |
-            out/banana-native-mali-g925-v0.4.apk
+            out/banana-native-mali-g925-v0.5.apk
             out/apk-sha256.txt
             out/build.log
             out/build-info.txt

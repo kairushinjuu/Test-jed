@@ -61,4 +61,21 @@ replace(present,
 replace('android/app/src/main/java/dev/nxnative/android/MainActivity.java',
 '''if (addFab != null) addFab.setVisibility(games.isEmpty() && !Ondevice.showing() ? View.GONE : View.VISIBLE);''',
 '''if (addFab != null) addFab.setVisibility(View.VISIBLE);''')
+
+# Expose a driver genuinely targeting Arm/Mali, without offering Winlator,
+# GameHub or unrelated formats in the AdrenoTools driver picker.
+driver_fetch='android/app/src/main/java/dev/nxnative/android/DriverFetch.java'
+replace(driver_fetch,
+'''    static final String[][] REPOS = {
+        {"MrPurple666/purple-turnip", "Mr. Purple Turnip"},''',
+'''    static final String[][] REPOS = {
+        {"zenithblue-oss/panvk-kbase-android", "Mesa PanVK (Mali experimental; select manually)"},
+        {"MrPurple666/purple-turnip", "Mr. Purple Turnip"},''')
+replace(driver_fetch,
+'''                if (n.toLowerCase(Locale.ROOT).endsWith(".zip") && url.startsWith("https://")) out.add(new Asset(repo, tag, n, url, a.optLong("size", 0)));''',
+'''                // Only the standard AdrenoTools ZIP is accepted by GpuDriver.install.
+                if (repo.equals("zenithblue-oss/panvk-kbase-android")
+                    && !n.toLowerCase(Locale.ROOT).endsWith("-adrenotools.zip")) continue;
+                if (n.toLowerCase(Locale.ROOT).endsWith(".zip") && url.startsWith("https://")) out.add(new Asset(repo, tag, n, url, a.optLong("size", 0)));''')
+
 print("Mali source patch complete")
