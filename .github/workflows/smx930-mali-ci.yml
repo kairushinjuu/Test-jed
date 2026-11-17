@@ -1,0 +1,139 @@
+name: SM-X930 Mali-G925 isolated validation and APK
+on:
+  push:
+    branches: [banana-mali-g925-20261117]
+    paths:
+      - 'banana/smx930/**'
+      - '.github/workflows/smx930-mali-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Read-only log regression suite
+        run: |
+          python3 -m unittest discover -s banana/smx930/tests -v
+          python3 banana/smx930/tools/analyze.py banana/smx930/tests/fixtures/faux-intro.log --json /tmp/smx930-intro.json
+          python3 -c "import json; x=json.load(open('/tmp/smx930-intro.json')); assert not x['target_met_on_observed_gameplay'] and x['intro_complete']"
+          bash -n banana/smx930/tools/collect-adb.sh
+      - name: Java startup policy regression suite
+        run: |
+          mkdir -p /tmp/smx930-java
+          javac -d /tmp/smx930-java banana/smx930/source_patch/MaliSmx930.java banana/smx930/source_patch/MaliSmx930JvmTest.java
+          java -cp /tmp/smx930-java dev.nxnative.android.MaliSmx930JvmTest
+  build:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+      - name: Fetch pinned official sources and matching original runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out source stage/lib stage/python
+          curl -fLsS --retry 3 --max-time 1000 \
+            https://git.eden-emu.dev/moceure/BananaNative/archive/e6b6f0d07a.zip \
+            -o out/BananaNative-e6b6f0d07a.zip
+          curl -fLsS --retry 3 --max-time 1000 \
+            https://git.eden-emu.dev/moceure/BananaNative/releases/download/v0.3.40/banana-native-v0.3.40.apk \
+            -o out/banana-native-original.apk
+          echo '519ace66f91136f40617d852fade50d3c70f6720fa13f44bdcfb782f5bb56c80  out/BananaNative-e6b6f0d07a.zip' | sha256sum -c -
+          echo '599760989fc20a0a4c25b593c88cf2c51ebccc588cd94b34d83066a4421a47ee  out/banana-native-original.apk' | sha256sum -c -
+          unzip -tqq out/BananaNative-e6b6f0d07a.zip
+          unzip -q out/BananaNative-e6b6f0d07a.zip -d source
+          test -f source/banananative/android/app/build.gradle
+          python3 - <<'PY'
+          import zipfile,io,os,pathlib
+          apk=zipfile.ZipFile("out/banana-native-original.apk")
+          stage=pathlib.Path("stage")
+          names=["libpython3.14.so","libnxpack.so","libzbicdec.so","libcra.so","libdmsh_xlate.so","libSPIRV-Tools-shared.so"]
+          for n in names:
+              (stage/"lib"/n).write_bytes(apk.read("lib/arm64-v8a/"+n))
+          z=zipfile.ZipFile(io.BytesIO(apk.read("assets/pack/python.zip")))
+          for member in z.namelist():
+              if member.startswith("/") or ".." in pathlib.PurePosixPath(member).parts:raise RuntimeError("unsafe stage entry")
+          z.extractall(stage/"python")
+          assert (stage/"python/lib/python3.14/os.py").exists()
+          print("Matching original on-device runtime staged")
+          PY
+          cd source/banananative
+          python3 dm/gfx/tools/xlate_tree.py --check-lib ../../stage/lib/libdmsh_xlate.so
+          python3 ../../banana/mali_patch_v0340.py
+          python3 ../../banana/smx930/source_patch/apply_smx930.py . --check
+          python3 ../../banana/smx930/source_patch/apply_smx930.py .
+          echo 'SOURCE_PATCHED=1' >> "$GITHUB_ENV"
+      - name: Install Android SDK and NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || :
+          sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+          echo "sdk.dir=$ANDROID_HOME" > source/banananative/android/app/local.properties
+          echo "NDK path: $ANDROID_HOME/ndk/28.2.13676358"
+      - name: Build SM-X930 Mali G925 APK (separate app ID; all 10 profiles)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd source/banananative/android/app
+          chmod +x gradlew
+          ./gradlew --no-daemon --max-workers=2 \
+            -PnxApp=malig925lab \
+            -PnxLabel="Banana Native SM-X930 Mali G925" \
+            -PnxVersion=0.3.40-mali-v0.6 \
+            -PnxVersionCode=34060 \
+            -PnxPackStage="$GITHUB_WORKSPACE/stage" \
+            apk --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/out/build.log"
+          cp out/nxnative-android-malig925lab.apk "$GITHUB_WORKSPACE/out/banana-native-smx930-mali-v0.6.apk"
+          cd "$GITHUB_WORKSPACE"
+          sha256sum out/banana-native-smx930-mali-v0.6.apk | tee out/apk-sha256.txt
+          unzip -tqq out/banana-native-smx930-mali-v0.6.apk
+      - name: Fetch optional experimental PanVK G925 driver
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          URL='https://github.com/zenithblue-oss/panvk-kbase-android/releases/download/panvk-kbase-v26.3.1/Mesa-PanVK-Android-v26.3.1-795ca7ff-adrenotools.zip'
+          curl -fLsS --retry 2 --max-time 180 "$URL" -o out/PanVK-v26.3.1-adrenotools-G925-experimental.zip
+          echo '7e2e9987bbebefb06f52b2570e61e6208503d4d3a10a395b97aea9b6e1fad9e4  out/PanVK-v26.3.1-adrenotools-G925-experimental.zip' | sha256sum -c -
+          if [ "$?" -ne 0 ]; then rm -f out/PanVK-v26.3.1-adrenotools-G925-experimental.zip; fi
+      - name: Capture source patch and build metadata
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p out
+          cp banana/mali_patch_v0340.py out/ || :
+          if [ -f source/banananative/android/app/build.gradle ]; then
+            grep -n -E 'compileSdk|ndkVersion|targetSdk|applicationId|versionCode|nxPackStage' source/banananative/android/app/build.gradle > out/build-info.txt || :
+          fi
+          find out -maxdepth 1 -type f -printf '%f %s bytes\n' >out/files.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: banana-native-smx930-mali-build-v06
+          path: |
+            out/banana-native-smx930-mali-v0.6.apk
+            out/apk-sha256.txt
+            out/build.log
+            out/build-info.txt
+            out/files.txt
+            out/mali_patch_v0340.py
+            out/PanVK-v26.3.1-adrenotools-G925-experimental.zip
+          if-no-files-found: warn
+          retention-days: 3
+          compression-level: 0
