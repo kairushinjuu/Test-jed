@@ -67,9 +67,12 @@
     "new_inserted_silence_ms_per_2000_callbacks": 87.0,
     "old_vk_queue_submit_ms_median": 9.8,
     "new_vk_queue_submit_ms_median": 10.3,
-    "baseline_and_testB_not_isolated_one_variable": true,
     "old_worst_stall_ms": 1364.4,
-    "new_worst_stall_ms": 1240.9
+    "new_worst_stall_ms": 1240.9,
+    "effective_timeline_mode_baseline_and_testB": "GPU-signalled in both",
+    "background_worker_threads_baseline_to_testB": "2 to 1",
+    "actual_concurrent_compilation_slots_baseline_and_testB": "1 in both",
+    "caveat": "Earlier 13:35 baseline had shader-cache misses whereas Test B had all hits, and run lengths differ; no causal performance ranking."
   },
   "intro_vk_submission_count_per_frame_median": 6.0,
   "intro_pipeline_cache": {
