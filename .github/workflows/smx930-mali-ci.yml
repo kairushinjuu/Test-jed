@@ -77,6 +77,8 @@ jobs:
           python3 ../../banana/mali_patch_v0340.py
           python3 ../../banana/smx930/source_patch/apply_smx930.py . --check
           python3 ../../banana/smx930/source_patch/apply_smx930.py .
+          python3 ../../banana/smx930/source_patch/fix_pack_dump_import.py . --check
+          python3 ../../banana/smx930/source_patch/fix_pack_dump_import.py .
           echo 'SOURCE_PATCHED=1' >> "$GITHUB_ENV"
       - name: Install Android SDK and NDK
         shell: bash
@@ -96,14 +98,32 @@ jobs:
             -PnxGames=0400486024DEC000 \
             -PnxApp=malig925lab \
             -PnxLabel="Banana Native SM-X930 Mali G925" \
-            -PnxVersion=0.3.40-mali-v0.7 \
-            -PnxVersionCode=34070 \
+            -PnxVersion=0.3.40-mali-v0.8 \
+            -PnxVersionCode=34080 \
             -PnxPackStage="$GITHUB_WORKSPACE/stage" \
             apk --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/out/build.log"
-          cp out/nxnative-android-malig925lab.apk "$GITHUB_WORKSPACE/out/banana-native-smx930-mali-v0.7.apk"
+          cp out/nxnative-android-malig925lab.apk "$GITHUB_WORKSPACE/out/banana-native-smx930-mali-v0.8.apk"
           cd "$GITHUB_WORKSPACE"
-          sha256sum out/banana-native-smx930-mali-v0.7.apk | tee out/apk-sha256.txt
-          unzip -tqq out/banana-native-smx930-mali-v0.7.apk
+          sha256sum out/banana-native-smx930-mali-v0.8.apk | tee out/apk-sha256.txt
+          unzip -tqq out/banana-native-smx930-mali-v0.8.apk
+          python3 - <<'PY'
+          import zipfile, io, pathlib, sys, tempfile, importlib.util
+          apk="out/banana-native-smx930-mali-v0.8.apk"
+          with zipfile.ZipFile(apk) as a:
+              with zipfile.ZipFile(io.BytesIO(a.read("assets/pack/tools.zip"))) as z:
+                  assert "scripts/pack_dump.py" in z.namelist()
+                  assert "dm/gfx/tools/shader_split.py" in z.namelist()
+                  with tempfile.TemporaryDirectory() as tmp:
+                      z.extractall(tmp)
+                      script=pathlib.Path(tmp)/"dm/gfx/tools/shader_split.py"
+                      content=script.read_text()
+                      assert " '..', '..', '..', 'scripts'" in content
+                      search_path=(script.parent/"../../../scripts").resolve()
+                      assert (search_path/"pack_dump.py").is_file()
+                      sys.path.insert(0,str(search_path))
+                      assert pathlib.Path(importlib.util.find_spec("pack_dump").origin).resolve()==search_path/"pack_dump.py"
+          print("PASS: packaged Python pack_dump import path and source layout")
+          PY
       - name: Capture source patch and build metadata
         if: always()
         shell: bash
@@ -117,9 +137,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: banana-native-smx930-mali-build-v07
+          name: banana-native-smx930-mali-build-v08
           path: |
-            out/banana-native-smx930-mali-v0.7.apk
+            out/banana-native-smx930-mali-v0.8.apk
             out/apk-sha256.txt
             out/build.log
             out/build-info.txt
