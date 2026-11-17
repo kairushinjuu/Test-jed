@@ -1,0 +1,83 @@
+{
+  "current_log": "20261117-142334",
+  "device": "SM-X930 / Mali-G925 MC12",
+  "driver": "PanVK faux123 v1.1.8",
+  "experiment": {
+    "DM_CODEC_STATS": "1",
+    "DM_VK_TL_HOST": "0",
+    "DM_VK_PSO_ASYNC": "1"
+  },
+  "old_intro_baseline": {
+    "intro_complete": false,
+    "audio_callback_windows": 4,
+    "audio_underflow_events": 101,
+    "audio_zero_padded_ms": 375.0,
+    "median_vk_queue_submit_cpu_ms_per_frame": 9.8,
+    "median_gpu_busy_p50_ms": 2.2,
+    "worst_longframe": {
+      "line": 751,
+      "frame": 1302,
+      "seconds": 47.67,
+      "whole_ms": 1364.4,
+      "gpu_fence_wait_ms": 1330.8,
+      "new_pipelines": 0,
+      "pipeline_creation_ms": 0.0,
+      "upload_mb": 0.0,
+      "upload_ms": 0.0,
+      "major_faults": 80,
+      "minor_faults": 1591
+    },
+    "observed_drop_ratio": 0.0515
+  },
+  "new_intro": {
+    "intro_complete": false,
+    "audio_callback_windows": 5,
+    "audio_underflow_events": 138,
+    "audio_zero_padded_ms": 435.0,
+    "median_vk_queue_submit_cpu_ms_per_frame": 10.3,
+    "median_gpu_busy_p50_ms": 2.2,
+    "worst_longframe": {
+      "line": 697,
+      "frame": 849,
+      "seconds": 32.36,
+      "whole_ms": 1240.9,
+      "gpu_fence_wait_ms": 1209.1,
+      "new_pipelines": 0,
+      "pipeline_creation_ms": 0.0,
+      "upload_mb": 0.0,
+      "upload_ms": 0.0,
+      "major_faults": 56,
+      "minor_faults": 1585
+    },
+    "observed_drop_ratio": 0.0056,
+    "minimum_mem_available_mib": 3338,
+    "peak_graphics_allocation_mib": 547,
+    "last_tracked_graphics_allocation_mib": 547,
+    "aaudio_stream": {
+      "rate_hz": 48000,
+      "burst_frames": 960,
+      "buffer_frames": 3840,
+      "requested_frames": 3840
+    }
+  },
+  "comparison": {
+    "old_underruns_per_2000_callbacks": 25.25,
+    "new_underruns_per_2000_callbacks": 27.6,
+    "old_inserted_silence_ms_per_2000_callbacks": 93.75,
+    "new_inserted_silence_ms_per_2000_callbacks": 87.0,
+    "old_vk_queue_submit_ms_median": 9.8,
+    "new_vk_queue_submit_ms_median": 10.3,
+    "baseline_and_testB_not_isolated_one_variable": true,
+    "old_worst_stall_ms": 1364.4,
+    "new_worst_stall_ms": 1240.9
+  },
+  "intro_vk_submission_count_per_frame_median": 6.0,
+  "intro_pipeline_cache": {
+    "hits_last_sample": 17,
+    "misses_last_sample": 0
+  },
+  "intro_av1_decode_p50_ms_median": 9.6,
+  "last_exit": "stopped by the user",
+  "quality_and_50fps_verdict": "unmeasured; no post-intro gameplay in this run",
+  "important": "The older post-intro crash cannot be assessed from the shorter Test B run."
+}

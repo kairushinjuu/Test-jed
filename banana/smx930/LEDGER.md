@@ -34,3 +34,25 @@
 - Committed sanitized metrics/test updates and independent A/B profiles to GitHub isolated branch as commit `6d8fef5d9979f7cc08cb47902f94da0438bd19a5`. No private raw log or user game assets committed.
 - Changed full APK compilation workflow to manual dispatch for this branch; added fast automatic log-analysis regression CI for tools and profiles. GitHub Actions run 44019795259 completed SUCCESS (all tests and no-private-raw-log check), URL https://github.com/kairushinjuu/Test-jed/actions/runs/44019795259.
 - Retain current installed v0.8, PanVK faux123 v1.1.8 and 42,848-shader library. **No new APK** because the first optimization is a reversible existing Vulkan timeline mode, and rebuilding would need device reinstallation and shader repacking. A/B has not been run on hardware yet.
+
+## 2026-11-17 — 14:03 crash follow-up (v0.10)
+
+- Authenticated Drive search found the latest `0400486024DEC000-20261117-140307.log` (1843 lines, 429148 bytes) and its digest. Downloaded into the working container. The raw log is **not** included in the public repository or toolkit.
+- Reproduced state v0.8 SM-X930 / Mali-G925 / faux123 1.1.8 with `DM_VK_TL_HOST=1` and `DM_CODEC_STATS=1`. Digest classifies OOM; no kernel kill record in the in-process log.
+- Scene transition at frame 10343: 27.312 s stall, 72 new pipelines taking 24.577 s, 321.6 MB uploaded, 26078 major/1897258 minor faults. GPU time 70/115 ms p50/p90 in later scene sample, 4.8 FPS. Graphics allocations 1327 to 3130 MiB, images 73 to 1809 MiB. 565 AAudio underruns / 1645 ms inserted silence.
+- Source audit: reserve is an image-cache policy, not a hard GPU-memory cap; fileback may add I/O; asynchronous workers and GPU timeline alternatives carry separate costs. No unverified renderer change made.
+- Upgraded stdlib analyzer to report post-movie scene windows, pipeline creation, upload and fault metrics; fixed rounding of small drop ratios. Added three synthetic regression tests: 19 tests total passed.
+- Created safe independent Recovery A (turn host timelines off) and Recovery B (one shader pipeline worker), plus a clearly labelled high-risk fileback candidate for later; **do not use the third yet**.
+- Pending: GitHub publication of sanitized analyzer/tests, backup of v0.10 lab to Drive, next on-tablet comparison. No APK rebuild so shader cache and signing remain untouched.
+- Added conservative `tools/compare_scene.py` (scene pressure only, does not call 50 FPS success) and four synthetic tests; updated normal `compare.py` to include fileback kind as a controlled variable. All **23 tests pass**. The recovery lab is packaged without raw logs.
+
+- Found a regression in the old ADB sampler: it targeted the obsolete v0.5 package `dev.nxnative.android.malig925`; fixed to the actual v0.8 lab `dev.nxnative.android.malig925lab`, both main/:game PIDs, and added live filtered LMKD/AndroidRuntime logcat for independent evidence. Added 3 synthetic/static tests.
+
+
+## 2026-11-17 14:23 JST — user terminated Test B early
+- Located Drive log `nxnative log 0400486024DEC000-20261117-142334.log` (file ID 1SrN3ikjxxlHYZrg-8oEruOlzeIVv7wPe), fetched authenticated raw bytes and analyzed 901 lines. Raw log is private; do not commit to public GitHub.
+- Confirmed effective `DM_VK_TL_HOST=0`, `DM_VK_PSO_ASYNC=1`, `DM_CODEC_STATS=1`. First environment line showing 2 is overridden by later Extra environment entry 1.
+- Intro only: 138 AAudio underruns in 10,000 callbacks, 435 ms silence, median 10.3 ms queue-submit CPU / 2.2 ms GPU; 6 queue submissions per intro frame; worst 1,240.9 ms frame (1,209.1 ms GPU fence wait), no pipeline creation. The current user stopped normally. No intro end or 3D scene, so cannot infer crash recovery or FPS improvement.
+- Compared older 13:35 introduction with 101 underruns in 8,000 callbacks, 375 ms silence, 9.8 ms median queue submit, 1,364.4 ms stall; effects small / runs temporally non-identical and two variables changed vs prior 14:03 crash run. No causal A/B ranking.
+- Read v0.8 source `vka_dev.c`, `vka_exec.c`, and `hle_audio.c`: queue submissions are ordered through `submit_x`, often around guest synchronization; `DM_VK_CHUNK` is 600 draws (intro only ~2–5 per frame) and not expected to reduce six calls; audio buffer 3840 at 48 kHz = 80 ms; cache hits make async compiler changes irrelevant to intro.
+- Next branch priority: instrument submit reasons and fence waits, then correctness-gated Mali-only batching; separately address the heavy-3D pipeline-memory problem. Avoid rebuild until concrete source fix.
