@@ -1,4 +1,4 @@
-# Banana Native SM-X930 Mali-G925 v0.12 experimental mass optimization
+# Banana Native SM-X930 Mali-G925 v0.12.1.1 experimental mass optimization
 
 **Status:** source optimizations / build verification; NOT verified 50 FPS. Ocarina of Time Switch 2 Edition title `0400486024DEC000`. Experimental build is separate (`dev.nxnative.android.malig925mass`), so v0.8 and its prepared shader library are not overwritten.
 
@@ -32,3 +32,5 @@ CI uses Android SDK 36, NDK 28.2, Gradle and the matching 0.3.40 native packing 
 ### Caution
 
 Prewarm can *worsen* audio and intro pacing if it overlaps a busy scene. The Mali floor avoids starting new speculative jobs under low memory but cannot cancel an already-running Vulkan compile. The per-slot pool change is spec-valid on paper but unproven with this PanVK driver. Start with an isolated test app and preserve v0.8. An APK checksum and CI success do not imply GPU correctness or an FPS increase.
+
+**v0.12.1 safety hardening:** On Mali slot-pool mode, do not reset a pool or recycle buffers after a command-slot GPU-fence timeout or a failed timeline retirement; abandon that frame instead of violating Vulkan command-buffer lifetime rules. This is particularly important for prior 6+ second stalls.

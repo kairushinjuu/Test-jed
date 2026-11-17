@@ -24,6 +24,15 @@ class TestPatches(unittest.TestCase):
   self.assertLess(wait,reset)
   self.assertIn('if (!g_slot_pool_mode) vk.vkResetCommandBuffer(cb, 0)',code)
   self.assertIn('vka_enc_sync();\n        VkResult rr',code)
+ def test_fence_timeout_preserves_mali_pool(self):
+  code=(ROOT/RELS[2]).read_text()
+  slot=code[code.index('if (g_slot[k].vf_on)'):code.index('g_t_slot += now_ns() - ts0;')]
+  self.assertIn('VkResult fr = vk.vkWaitForFences',slot)
+  self.assertIn('if (g_slot_pool_mode) { // No reuse or pool reset while commands may be in flight.',slot)
+  self.assertIn('if (!completed && g_slot_pool_mode)',slot)
+  self.assertEqual(slot.count('g_cb = VK_NULL_HANDLE; return;'),2)
+  self.assertIn('vk.vkResetFences(V.dev, 1, &g_slot[k].vf)',slot)
+  self.assertTrue(slot.index('if (g_slot_pool_mode) { // No reuse') < slot.index('vk.vkResetFences('))
  def test_flags_safe_disable(self):
   code=(ROOT/RELS[2]).read_text();j=(ROOT/RELS[0]).read_text()
   self.assertIn('VKA_ENV("DM_VK_SLOT_POOL", 0)',code)

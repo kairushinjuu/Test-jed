@@ -1,4 +1,4 @@
-name: SM-X930 MassOpt v0.12 native source and APK
+name: SM-X930 MassOpt v0.12.1 native source and APK
 on:
   push:
     branches: [banana-mali-g925-20261117]
@@ -101,17 +101,17 @@ jobs:
             -PnxGames=0400486024DEC000 \
             -PnxApp=malig925mass \
             -PnxLabel="Banana Native SM-X930 MassOpt" \
-            -PnxVersion=0.3.40-mali-v0.12 \
-            -PnxVersionCode=34120 \
+            -PnxVersion=0.3.40-mali-v0.12.1 \
+            -PnxVersionCode=34121 \
             -PnxPackStage="$GITHUB_WORKSPACE/stage" \
             apk --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/out/build.log"
-          cp out/nxnative-android-malig925mass.apk "$GITHUB_WORKSPACE/out/banana-native-smx930-mali-v0.12.apk"
+          cp out/nxnative-android-malig925mass.apk "$GITHUB_WORKSPACE/out/banana-native-smx930-mali-v0.12.1.apk"
           cd "$GITHUB_WORKSPACE"
-          sha256sum out/banana-native-smx930-mali-v0.12.apk | tee out/apk-sha256.txt
-          unzip -tqq out/banana-native-smx930-mali-v0.12.apk
+          sha256sum out/banana-native-smx930-mali-v0.12.1.apk | tee out/apk-sha256.txt
+          unzip -tqq out/banana-native-smx930-mali-v0.12.1.apk
           python3 - <<'PY'
           import zipfile, io, pathlib, sys, tempfile, importlib.util
-          apk="out/banana-native-smx930-mali-v0.12.apk"
+          apk="out/banana-native-smx930-mali-v0.12.1.apk"
           with zipfile.ZipFile(apk) as a:
               with zipfile.ZipFile(io.BytesIO(a.read("assets/pack/tools.zip"))) as z:
                   assert "scripts/pack_dump.py" in z.namelist()
@@ -141,9 +141,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: banana-native-smx930-mali-build-v012
+          name: banana-native-smx930-mali-build-v0121
           path: |
-            out/banana-native-smx930-mali-v0.12.apk
+            out/banana-native-smx930-mali-v0.12.1.apk
             out/apk-sha256.txt
             out/build.log
             out/build-info.txt

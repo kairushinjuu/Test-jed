@@ -14,3 +14,5 @@ Implemented pinned v0.8→v0.12 source patcher, checked exact source anchors, ap
 Pending: synthetic/source regression, GitHub CI native build and actual tablet validation. These are *hypotheses*, not measured FPS gains. Preserve original v0.8 and shader cache; new test APK gets a separate package ID.
 
 Added portable pinned-source CI tests (6 pass), Java startup tests (pass) and a source-grounded README. Tests check command-pool reset only after slot fence, bounded memory-guarded prewarm, no deletion of host access barrier, and bounded trace. Native Android compile still pending.
+
+After the first successful v0.12 native build, code review identified upstream reuse of command buffers even after a 6s GPU-fence timeout; per-slot pool resets would then be invalid. Added v0.12.1 Mali-only failure guards for unsuccessful fence/timeline retirement (retains upstream fallback when DM_VK_SLOT_POOL=0), a targeted seventh regression, and will rebuild. Existing v0.12 should be superseded for device tests.

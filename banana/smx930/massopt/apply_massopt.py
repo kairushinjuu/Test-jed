@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pinned SM-X930 v0.8 -> v0.12 experimental performance patch.
+"""Pinned SM-X930 v0.8 -> v0.12.1 experimental performance patch.
 Refuse source mismatches, preserve safe failure; run on the *already Mali-v0.8-patched* tree.
 """
 import argparse
@@ -119,6 +119,31 @@ static int g_slot_pool_mode; // Mali: own command pool for each reusable complet
     replace(root,p,'''VkCommandBufferAllocateInfo ai = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, .commandPool = g_pool, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};''','''VkCommandBufferAllocateInfo ai = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             .commandPool = g_slot_pool_mode ? g_slot[k].pool : g_pool,
             .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1};''',check)
+    # Never reset a Mali slot pool if a GPU fence timed out. On the Tab S11
+    # Ultra we have observed >6-second GPU fence stalls; the original fallback
+    # reuses the command buffer anyway, which is unsafe for whole-pool resets.
+    replace(root,p,'''    if (g_slot[k].vf_on) {
+        if (vk.vkWaitForFences(V.dev, 1, &g_slot[k].vf, VK_TRUE, vka_hang_ns())) VRED_ONCE("a command buffer slot's fence was not reached in the hang time: reused anyway");
+        vk.vkResetFences(V.dev, 1, &g_slot[k].vf); g_slot[k].vf_on = 0;
+        if (g_slot_ts[k]) gpu_slot_done(k);   // its GPU times are there (its timeline fence may come later)
+    } else if (g_slot[k].fence) vka_wait_done(g_slot[k].fence, UINT64_MAX);''', '''    if (g_slot[k].vf_on) {
+        VkResult fr = vk.vkWaitForFences(V.dev, 1, &g_slot[k].vf, VK_TRUE, vka_hang_ns());
+        if (fr) {
+            VRED_ONCE("a command buffer slot's fence was not reached in the hang time: reused anyway");
+            if (g_slot_pool_mode) { // No reuse or pool reset while commands may be in flight.
+                VRED("Mali command pool slot %u: fence wait failed %d; preserve in-flight buffers", k, fr);
+                g_cb = VK_NULL_HANDLE; return;
+            }
+        }
+        vk.vkResetFences(V.dev, 1, &g_slot[k].vf); g_slot[k].vf_on = 0;
+        if (g_slot_ts[k]) gpu_slot_done(k);   // its GPU times are there (its timeline fence may come later)
+    } else if (g_slot[k].fence) {
+        int completed = vka_wait_done(g_slot[k].fence, UINT64_MAX);
+        if (!completed && g_slot_pool_mode) {
+            VRED("Mali command pool slot %u: timeline slot not retired, preserving command buffers", k);
+            g_cb = VK_NULL_HANDLE; return;
+        }
+    }''',check)
     # Controlled submit diagnostics are bounded and off by default. No potentially unsafe barriers removed.
     p='dm/gfx/vk_android/vka_dev.c'
     replace(root,p,'''static _Atomic uint64_t g_qs_lock_ns, g_qs_call_ns, g_qs_n;''','''static _Atomic uint64_t g_qs_lock_ns, g_qs_call_ns, g_qs_n;
