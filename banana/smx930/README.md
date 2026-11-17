@@ -67,3 +67,13 @@ The completed 42,848-shader library removed the previous preparation failure, bu
 To test without reinstalling the APK or losing shader caches, copy **one** of `profiles/40-intro-baseline.env`, `41-intro-host-timeline.env`, `42-intro-audio-buffer.env` into **Game settings → Advanced → Extra environment**. The timeline and audio profiles are alternative A/B experiments, **not simultaneous settings**. Driver and resolution should remain unchanged. `DM_CODEC_STATS=1` is diagnostic and common to all three.
 
 Use `python3 tools/analyze.py <exported.log> --json run.json --md run.md` and compare matching experimental runs. The report never promotes 30 FPS movie data to 50 FPS gameplay success. No device credentials, game dump, or original user log should be committed to the public GitHub test repository.
+
+## 2026-11-17 v0.10 scene-crash recovery
+
+The 14:03:07 log identified a 27.3-second first-scene shader/fence stall and ~3.1 GiB tracked Vulkan allocations; the launcher classifies the abrupt termination as memory-related. See `reports/20261117-140307-timeline-crash.md`. The game log does not contain independent LMKD evidence.
+
+`profiles/50-revert-host-timeline.env` returns to the previous GPU-signalled timeline mode without reinstalling. `51-single-background-compiler.env` is a **separate** one-worker PSO experiment for the next run. `52-shader-only-fileback-LATER.env` is **not recommended until memory is captured**, because avoiding file-backed texture storage increases RAM use. No changes to APK and no shader reprepare.
+
+### Comparing crashes before 10 FPS observations
+
+The original `tools/compare.py` intentionally refuses to rank FPS without ≥10 post-intro observations. For scene-start crashes, use `tools/compare_scene.py` instead: it compares controlled settings and side-by-side *observations* (fence wait, pipeline time, image memory, audio events), with no false FPS-success claim. Keep exact game build, driver, resolution and scene. The first comparison is timeline host on vs off; a later comparison can isolate `DM_VK_PSO_ASYNC=2` vs 1.

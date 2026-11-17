@@ -14,7 +14,7 @@ def compare(a,b,allow_quality_change=False):
     enough = all(x.get('post_intro_fps_samples',0)>=10 for x in (a,b))
     # Keep the experiment controlled: more than one performance knob changed
     # makes it impossible to attribute any FPS or audio difference.
-    knobs=('DM_VK_TL_HOST','DM_DBG_AU_FRAMES','DM_VK_WORKER','DM_VK_PSO_SLOTS','DM_VK_IMG_RESERVE_MB','DM_MEM_FILEBACK','DM_CODEC_THREAD','DM_AV1_RGBA_EARLY')
+    knobs=('DM_VK_TL_HOST','DM_DBG_AU_FRAMES','DM_VK_WORKER','DM_VK_PSO_SLOTS','DM_VK_IMG_RESERVE_MB','DM_MEM_FILEBACK','DM_MEM_FILEBACK_KINDS','DM_CODEC_THREAD','DM_AV1_RGBA_EARLY')
     changes=[k for k in knobs if (a.get('environment') or {}).get(k)!=(b.get('environment') or {}).get(k)]
     if len(changes)>1: checks.append('multiple tuning changes in one A/B: '+', '.join(changes))
     if not enough: checks.append('at least 10 observed gameplay FPS samples required in both runs')
