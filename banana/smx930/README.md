@@ -77,3 +77,7 @@ The 14:03:07 log identified a 27.3-second first-scene shader/fence stall and ~3.
 ### Comparing crashes before 10 FPS observations
 
 The original `tools/compare.py` intentionally refuses to rank FPS without ≥10 post-intro observations. For scene-start crashes, use `tools/compare_scene.py` instead: it compares controlled settings and side-by-side *observations* (fence wait, pipeline time, image memory, audio events), with no false FPS-success claim. Keep exact game build, driver, resolution and scene. The first comparison is timeline host on vs off; a later comparison can isolate `DM_VK_PSO_ASYNC=2` vs 1.
+
+### Capturing an actual Android low-memory kill (optional ADB)
+
+The log digest alone is insufficient to prove LMKD. The `tools/collect-adb.sh` capture now targets **`dev.nxnative.android.malig925lab`**, not the older v0.5 package. It records both the main and `:game` process memory, process pressure, thermal state, and a filtered live low-memory/abort logcat stream. It does not clear logs, reboot, touch game files, or collect the unfiltered private device log. Requires a connected ADB host, no root. Start this script immediately before playing and export the game's own log separately. Never upload raw logcat to public GitHub.
