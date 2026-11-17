@@ -79,11 +79,11 @@ jobs:
           python3 ../../banana/smx930/source_patch/apply_smx930.py .
           python3 ../../banana/smx930/source_patch/fix_pack_dump_import.py . --check
           python3 ../../banana/smx930/source_patch/fix_pack_dump_import.py .
+          python3 ../../banana/smx930/massopt/apply_massopt.py . --check
           python3 ../../banana/smx930/massopt/apply_massopt.py .
           python3 ../../banana/smx930/drawopt/apply_drawopt.py . --check
           python3 ../../banana/smx930/drawopt/apply_drawopt.py .
-          DRAWOPT_SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/drawopt -p test_drawopt.py -v --check
-          python3 ../../banana/smx930/massopt/apply_massopt.py .
+          DRAWOPT_SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/drawopt -p test_drawopt.py -v
           SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/massopt -p test_massopt_ci.py -v
           echo 'SOURCE_PATCHED=1' >> "$GITHUB_ENV"
       - name: Install Android SDK and NDK
