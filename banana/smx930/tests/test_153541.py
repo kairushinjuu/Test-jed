@@ -1,6 +1,6 @@
 import sys,unittest
 from pathlib import Path
-sys.path.insert(0,str(Path(__file__).resolve().parent))
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from analyze import parse
 class Test153541(unittest.TestCase):
  def test_encoder_wait_and_long_gpu_part(self):
