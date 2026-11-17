@@ -30,3 +30,7 @@
 - Safest immediate follow-up: v0.8 unchanged, a baseline intro run with DM_CODEC_STATS=1, an isolated DM_VK_TL_HOST=1 run, then (separately) a 5760-frame AAudio buffer run; compare exported logs.
 - Do not bake host timeline changes into the APK until measured; changing the app signature would require reinstallation and loss of newly prepared 695.6 MB shader cache.
 - Pending GitHub test-run and Drive backup (record tool results below).
+- Completed 2026-11-17: uploaded `BananaNative_SM-X930_Intro_Audio_AB_Lab_v0.9.zip` and individual report/profiles/analyzer/tests to the existing Google Drive `SMX930_Lab` folder; each upload acknowledged success. ZIP SHA-256 `26c53f58193cbe25bc55089b880949698ba99e555f09b262da9f8dd503ab5d24`.
+- Committed sanitized metrics/test updates and independent A/B profiles to GitHub isolated branch as commit `6d8fef5d9979f7cc08cb47902f94da0438bd19a5`. No private raw log or user game assets committed.
+- Changed full APK compilation workflow to manual dispatch for this branch; added fast automatic log-analysis regression CI for tools and profiles. GitHub Actions run 44019795259 completed SUCCESS (all tests and no-private-raw-log check), URL https://github.com/kairushinjuu/Test-jed/actions/runs/44019795259.
+- Retain current installed v0.8, PanVK faux123 v1.1.8 and 42,848-shader library. **No new APK** because the first optimization is a reversible existing Vulkan timeline mode, and rebuilding would need device reinstallation and shader repacking. A/B has not been run on hardware yet.
