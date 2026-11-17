@@ -1,0 +1,8 @@
+[dm] [vk] driver: panvk (panvk_faux123 v1.1.8)
+[dm] [vk] swapchain 2960x1848, 5 images, format 37
+[dm] [vk] fps: 30.0 game frames a second (33.3 ms), 30.0 presented
+[dm] [nvn] on-screen up to frame 300: 290 frames, dropped 10 (discarded 0), p99 66.66 ms; footprint 3933 MiB
+[dm] [vk] memory: placed pools 1222 MiB, images 1174 MiB (282), sparse tile blocks 0 MiB, scratch 96 MiB (6 blocks): 2491 MiB
+[dm] [vk] image cache limit 1424 MiB: images 62 MiB, MemTotal 11512 MiB, MemAvailable 1874 MiB (reserve 512)
+[dm] [vk] long compile: whole graphics pipeline of shader abcdef took 17.7 s
+[dm] [codec] AV1 decoder 1: end of stream after 9253 pictures
