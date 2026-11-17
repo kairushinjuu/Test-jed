@@ -1,8 +1,5 @@
 name: Banana Native Mali G925 source and build probe
 on:
-  push:
-    branches:
-      - banana-mali-g925-20261117
   workflow_dispatch:
 permissions:
   contents: read
