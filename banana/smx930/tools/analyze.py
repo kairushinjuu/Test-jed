@@ -35,6 +35,13 @@ PACE_SCENE = re.compile(r'pace up to frame (\d+) \(.*?\): .*?; ([\d.]+) fps; GPU
 NEW_PSO = re.compile(r'new pipelines (\d+) \+ shader libraries (\d+), ([\d.]+) ms in all')
 UPLOAD = re.compile(r'texture uploads (\d+) first \+ (\d+) re-uploads, ([\d.]+) MB / ([\d.]+) ms')
 FAULTS = re.compile(r'page faults (\d+) major / (\d+) minor')
+# MassOpt-only observations; absent counters remain unknown rather than zero.
+PREWARM_PROGRESS = re.compile(r'prewarm: (\d+) of (\d+) pipeline keys in ([\d.]+) s on (\d+) threads: (\d+) made')
+PREWARM_FLOOR = re.compile(r'Mali prewarm: stopped at (\d+) MiB MemAvailable \(floor (\d+) MiB\)')
+PIPELINE_CACHE_SAVED = re.compile(r'pipeline cache: (\d+) bytes written .*?\((\d+) pipelines made this run\)')
+REPLAY_CPU = re.compile(r'replay recording [\d.]+ ms a frame \(its CPU ([\d.]+)\)')
+REPLAY_OTHER = re.compile(r'pace cost up to frame .*?other records ([\d.]+)')
+
 
 def parse(text: str, digest: str = '') -> dict:
     lines = text.splitlines()
@@ -61,6 +68,8 @@ def parse(text: str, digest: str = '') -> dict:
     aaudio_open = []
     codec_ahead = 0
     scene_windows = []
+    pw_progress = []; pw_floors = []; saved_pipelines = []; replay_other = []
+    audio_disconnections = 0
     for i, s in enumerate(lines):
         m = FPS.search(s)
         if m: fps_samples.append({'line': i+1, 'fps': float(m[1]), 'phase': 'intro' if intro_end is not None and i < intro_end else 'post_intro' if intro_end is not None else 'unclassified'})
@@ -83,8 +92,13 @@ def parse(text: str, digest: str = '') -> dict:
         if m := AUDIO_WINDOW.search(s): audio_samples.append({'line':i+1,'callback':int(m[1]),'underruns':int(m[2]),'silence_ms':float(m[3])})
         if m := PACE_COST.search(s): pace_submit_ms.append(float(m[2]))
         if m := PACE_GPU.search(s): pace_gpu_ms.append(float(m[2]))
+        if m := PREWARM_PROGRESS.search(s): pw_progress.append({'made':int(m[5]),'processed':int(m[1]),'available':int(m[2]),'seconds':float(m[3]),'threads':int(m[4])})
+        if m := PREWARM_FLOOR.search(s): pw_floors.append({'available_mib':int(m[1]),'threshold_mib':int(m[2])})
+        if m := PIPELINE_CACHE_SAVED.search(s): saved_pipelines.append({'bytes':int(m[1]),'made_in_run':int(m[2])})
+        if 'AAUDIO_STREAM_STATE_DISCONNECTED' in s: audio_disconnections += 1
+        if m := REPLAY_OTHER.search(s): replay_other.append({'line':i+1,'other_records_ms':float(m[1])})
         if m := PACE_SCENE.search(s):
-            scene_windows.append({'line':i+1,'frame':int(m[1]),'fps':float(m[2]),'gpu_p50_ms':float(m[3]),'gpu_p90_ms':float(m[4]),'replay_record_ms':float(m[5]),
+            scene_windows.append({'line':i+1,'frame':int(m[1]),'fps':float(m[2]),'gpu_p50_ms':float(m[3]),'gpu_p90_ms':float(m[4]),'replay_record_ms':float(m[5]),'replay_cpu_ms':float(REPLAY_CPU.search(s)[1]) if REPLAY_CPU.search(s) else None,
                                   'phase':'after_movie_end' if intro_end is not None and i > intro_end else 'movie_or_unknown'})
         if m := LONGFRAME.search(s):
             mw = FENCE_WAIT.search(s)
@@ -108,10 +122,14 @@ def parse(text: str, digest: str = '') -> dict:
     post_ratio = post_drop/(post_seen+post_drop) if post_seen+post_drop else None
     post_p99 = max((x['p99_ms'] for x in post_stats),default=None)
     digest_oom = 'out of memory' in digest.lower() or 'ran out of memory' in digest.lower()
+    digest_android_closed_unknown = 'killed by android:' in digest.lower() and not digest_oom
     flags = []
     if swapchain_fail: flags.append('SWAPCHAIN_FAILED')
     if not swapchain_ok: flags.append('NO_SUCCESSFUL_SWAPCHAIN_OBSERVED')
     if digest_oom: flags.append('APP_DIGEST_REPORTS_OOM_NOT_PROVEN_BY_LOG')
+    if digest_android_closed_unknown: flags.append('ANDROID_CLOSED_CAUSE_UNCONFIRMED')
+    if audio_disconnections: flags.append('AUDIO_STREAM_DISCONNECTED')
+    if pw_floors: flags.append('PREWARM_STOPPED_AT_RAM_FLOOR')
     if intro_end is None: flags.append('INTRO_END_NOT_OBSERVED')
     if len(play) < 10: flags.append('INSUFFICIENT_GAMEPLAY_FPS_SAMPLES')
     if mem and max(x['total_mib'] for x in mem) >= 2400: flags.append('GRAPHICS_ALLOCATIONS_OVER_2400_MIB')
@@ -120,6 +138,7 @@ def parse(text: str, digest: str = '') -> dict:
     if longframes and max(x['whole_ms'] for x in longframes) >= 100: flags.append('LONG_FRAME_STALL_OVER_100MS')
     if pace_submit_ms and statistics.median(pace_submit_ms) >= 5: flags.append('CPU_DRIVER_SUBMIT_TIME_OVER_5MS_PER_FRAME')
     if any(x['gpu_p50_ms'] >= 50 for x in post_scene_windows): flags.append('GAMEPLAY_TRANSITION_GPU_OVER_50MS')
+    if any((x.get('replay_cpu_ms') or 0)>=100 for x in post_scene_windows): flags.append('GAMEPLAY_REPLAY_CPU_OVER_100MS')
     if any(x['pipeline_creation_ms'] is not None and x['pipeline_creation_ms'] >= 10000 for x in longframes): flags.append('SCENE_TRANSITION_PIPELINES_OVER_10S')
     def rnd(x): return round(x, 2) if x is not None else None
     # We never claim a pass with fewer than 10 observations after the intro.
@@ -147,6 +166,11 @@ def parse(text: str, digest: str = '') -> dict:
         'audio_underflow_events': sum(x['underruns'] for x in audio_samples) if audio_samples else None,
         'audio_zero_padded_ms': rnd(sum(x['silence_ms'] for x in audio_samples)) if audio_samples else None,
         'aaudio_stream': aaudio_open[-1] if aaudio_open else None,
+        'aaudio_disconnections': audio_disconnections,
+        'massopt_prewarm_progress': pw_progress[-1] if pw_progress else None,
+        'massopt_prewarm_stop': pw_floors[-1] if pw_floors else None,
+        'massopt_saved_pipeline_cache': saved_pipelines[-1] if saved_pipelines else None,
+        'after_movie_replay_other_records_ms': next((x['other_records_ms'] for x in reversed(replay_other) if intro_end is not None and x['line']>intro_end),None),
         'median_vk_queue_submit_cpu_ms_per_frame': rnd(statistics.median(pace_submit_ms)) if pace_submit_ms else None,
         'median_gpu_busy_p50_ms': rnd(statistics.median(pace_gpu_ms)) if pace_gpu_ms else None,
         'worst_longframe': max(longframes,key=lambda x:x['whole_ms'],default=None),
@@ -162,6 +186,7 @@ def parse(text: str, digest: str = '') -> dict:
         'post_intro_window_p99_ms':post_p99,'post_intro_dropped_ratio':rnd(post_ratio),
         'median_simulation_time_ratio':rnd(statistics.median(time_ratios)) if time_ratios else None,
         'digest_oom_classification':digest_oom,
+        'digest_android_closed_unknown_cause':digest_android_closed_unknown,
         'flags':flags,'target_met_on_observed_gameplay':passed,
         'caveat':'A log cannot prove absence of visual corruption, audio sync, or Android LMKD without device traces. No extrapolation from intro to gameplay.'
     }

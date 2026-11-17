@@ -1,0 +1,70 @@
+{
+  "provenance": {
+    "private_log_basename": "0400486024DEC000-20261117-151456.log.txt",
+    "log_line_count": 1831,
+    "digest_basename": "0400486024DEC000-20261117-151456.digest.txt",
+    "device": "Samsung SM-X930 / Mali-G925 MC12",
+    "build": "MassOpt v0.12.1",
+    "driver": "PanVK faux123 v1.1.8"
+  },
+  "status": {
+    "intro_complete": true,
+    "process_ended_abruptly": true,
+    "launcher_digest": "Android closed process; no stated cause",
+    "kernel_lmkd_evidence": false,
+    "source_error_uncertain": true
+  },
+  "prewarm": {
+    "enabled": true,
+    "keys_available": 3456,
+    "compiled_before_stop": 150,
+    "seconds": 45.9,
+    "memory_floor_mib": 3072,
+    "available_at_stop_mib": 3030
+  },
+  "vulkan": {
+    "slot_pools_initialized": true,
+    "pipeline_cache_last_bytes": 20915012,
+    "pipelines_compiled_in_run": 260,
+    "peak_graphics_allocation_mib": 2845,
+    "last_graphics_allocation_mib": 2845,
+    "last_image_allocation_mib": 1543,
+    "minimum_mem_available_mib": 2914,
+    "max_memory_maps": 33805,
+    "longest_compute_compile_ms": 5315.0
+  },
+  "audio": {
+    "window_count": 29,
+    "callback_count": 58000,
+    "underruns": 196,
+    "silence_inserted_ms": 600.1,
+    "audio_stream_disconnections": 2
+  },
+  "frame": {
+    "worst_longframe": {
+      "line": 851,
+      "frame": 1609,
+      "seconds": 57.9,
+      "duration_ms": 1093.9,
+      "after_intro": false,
+      "fence_wait_ms": 1070.8,
+      "major_page_faults": 27.0,
+      "pipeline_creation_ms": 0.0
+    },
+    "first_scene_windows": [
+      {
+        "line": 1818,
+        "frame": 10472,
+        "fps": 3.7,
+        "gpu_p50_ms": 1.6,
+        "gpu_p90_ms": 2.4,
+        "replay_record_ms": 247.3,
+        "replay_cpu_ms": 236.0,
+        "after_intro": true
+      }
+    ],
+    "latest_scene_replay_other_record_ms": 228.6,
+    "total_major_faults_in_logged_longframes_after_intro": 23984.0
+  },
+  "caveat": "No kernel LMKD or native tombstone in this log. Scene sampling insufficient for reliable sustained FPS. Pipeline prewarm effect cannot be isolated without a matched no-prewarm run."
+}
