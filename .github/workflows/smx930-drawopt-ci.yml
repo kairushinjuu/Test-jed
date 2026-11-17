@@ -1,10 +1,5 @@
 name: SM-X930 DrawOpt v0.16 native validation and APK
 on:
-  push:
-    branches: [banana-mali-g925-20261117]
-    paths:
-      - 'banana/smx930/massopt_v016/**'
-      - '.github/workflows/smx930-drawopt-ci.yml'
   workflow_dispatch:
 permissions:
   contents: read
