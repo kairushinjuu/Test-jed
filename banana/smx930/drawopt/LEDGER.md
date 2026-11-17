@@ -1,0 +1,13 @@
+# SM-X930 Mali G925 draw-path optimization ledger
+
+2026-11-17 JST — User authorized source-level renderer optimization after v0.15 analysis. Focus: vka_draw images+pass+key overhead, memory lifetime with correctness-preserving guards. Target OOT Switch2 Edition 0400486024DEC000; no copyrighted game data here.
+
+- Tool: container listing: prior v0.12.1 source ZIP available, GitHub branch `banana-mali-g925-20261117` and last passed v0.15 CI `44036153707`; source not initially extracted.
+- Tool: checked ZIP layout, target files present, ~29 GB disk free, clang/cmake/ninja/javac available.
+- Tool: extracted complete v0.12.1 source to isolated work dir.
+- Inspected exact v0.12.1 vka_draw/vka_tex/vka.h: existing `vka_walk` is cheap in sampled trace; existing texture binding memo uses a generation token and sampled drawings. The expensive PT(2) section combines image prep, barrier checks, render-pass opening, texmask and key; exact subdivision missing. Confirmed texture storage preflight uses two registry locks in existing branch, and `VKA_ENV` already caches values so no naive getenv microoptimization.
+- Authored pinned idempotent `apply_drawopt.py` to combine the two `vka_tex` storage pending queries under one lock on Mali, preserving image creation and render-pass ordering, with opt-out `DM_VK_DRAW_PREP_FAST=0`. Added CPU-only sampled section timers (prepare, hazards, render pass, texmask, key), fixed docs validation for DM_VK_SLOT_POOL. Checked exact source anchors; applied and idempotence-run on extracted v0.12.1 tree.
+- Added 6 source+semantic regression tests, including exhaustive 512-state truth-table parity for the combined read-only storage-image preflight, one-lock checks, patch idempotence, Mali-only opt-out, and bounded sampled profiler. All six pass locally against patched source.
+- Added standalone draw-hot phase analyzer, two tests (missing data remains unknown), source patch README with opt-outs and shader import warnings, built ZIP patch and reference diffs; all eight local tests pass, py_compile and ZIP CRC pass.
+- GitHub CI strategy: isolated DrawOpt v0.16 workflow, push on `banana/smx930/drawopt/**` only; apply pinned baseline patch chain + v0.12.1 + drawopt; Android NDK native build for compiler verification. New package `malig925draw` avoids signature mismatch with v0.12.1; prepared shader library can be imported, do not retranslate.
+- Tool: Google Drive folder DrawOpt_v016 created/verified; first four scripts uploaded (IDs 1oI9RRPxTMDWmx5LqKJp2zDZYMoOmtT23, 14T8egv_tvNm7RQ6A5LDFEo4C5tY_x8wu, 10cXU9VAzloUUTA3PG-h-d8bFJjRAeEnN, 1KoeMAPXl4j8PNrDuKyLo7pXh8aEMk7dV). README, LEDGER and toolkit encountered destination collision; will use uniquely named versions instead of overwriting unknown files.

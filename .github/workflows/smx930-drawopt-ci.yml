@@ -1,5 +1,10 @@
-name: SM-X930 DrawOpt v0.16 native validation and APK
+name: SM-X930 DrawOpt v0.16 native source and APK
 on:
+  push:
+    branches: [banana-mali-g925-20261117]
+    paths:
+      - 'banana/smx930/drawopt/**'
+      - '.github/workflows/smx930-drawopt-ci.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -77,9 +82,9 @@ jobs:
           python3 ../../banana/smx930/massopt/apply_massopt.py . --check
           python3 ../../banana/smx930/massopt/apply_massopt.py .
           SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/massopt -p test_massopt_ci.py -v
-          python3 ../../banana/smx930/massopt_v016/apply_v016.py . --check
-          python3 ../../banana/smx930/massopt_v016/apply_v016.py .
-          SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/massopt_v016 -p test_v016_ci.py -v
+          python3 ../../banana/smx930/drawopt/apply_drawopt.py . --check
+          python3 ../../banana/smx930/drawopt/apply_drawopt.py .
+          SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/drawopt -p 'test_*.py' -v
           echo 'SOURCE_PATCHED=1' >> "$GITHUB_ENV"
       - name: Install Android SDK and NDK
         shell: bash
@@ -131,8 +136,8 @@ jobs:
         run: |
           mkdir -p out
           cp banana/mali_patch_v0340.py out/ || :
-          cp banana/smx930/massopt_v016/apply_v016.py out/ || :
           cp banana/smx930/massopt/apply_massopt.py out/ || :
+          cp banana/smx930/drawopt/apply_drawopt.py out/ || :
           if [ -f source/banananative/android/app/build.gradle ]; then
             grep -n -E 'compileSdk|ndkVersion|targetSdk|applicationId|versionCode|nxPackStage' source/banananative/android/app/build.gradle > out/build-info.txt || :
           fi
@@ -148,8 +153,8 @@ jobs:
             out/build-info.txt
             out/files.txt
             out/mali_patch_v0340.py
-            out/apply_v016.py
             out/apply_massopt.py
+            out/apply_drawopt.py
           if-no-files-found: warn
           retention-days: 3
           compression-level: 0
