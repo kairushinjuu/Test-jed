@@ -1,0 +1,51 @@
+name: Validate faux123 PanVK v1.1.8 on Banana Native
+on:
+  push:
+    branches: [banana-mali-g925-20261117]
+    paths: [.github/workflows/banana-faux123-verify.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Download, checksum and validate Banana-compatible driver package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          curl -fLsS --retry 4 --max-time 180 \
+            'https://github.com/faux123/panvk-faux123-driver-rg556/releases/download/v1.1.8/panvk_faux123_v1.1.8.adpkg.zip' \
+            -o out/panvk_faux123_v1.1.8.adpkg.zip
+          echo '1898e89be6256e67762876fe249e9017717f8643cc5fb6194cf11195fe6da6c8  out/panvk_faux123_v1.1.8.adpkg.zip' \
+            | sha256sum -c - | tee out/verification.txt
+          python3 - <<'PY' | tee -a out/verification.txt
+          import zipfile,json,pathlib
+          p=pathlib.Path('out/panvk_faux123_v1.1.8.adpkg.zip')
+          with zipfile.ZipFile(p) as z:
+              bad=z.testzip()
+              assert bad is None,bad
+              names=z.namelist()
+              metas=[n for n in names if pathlib.PurePosixPath(n).name=='meta.json']
+              print('zip files',len(names))
+              print('metadata candidates',metas)
+              assert metas, 'missing meta.json: cannot import using Banana Native'
+              meta=json.loads(z.read(metas[0]))
+              lib=meta.get('libraryName')
+              print('driver name',meta.get('name'))
+              print('libraryName',lib)
+              assert isinstance(lib,str) and lib
+              assert any(pathlib.PurePosixPath(n).name==lib for n in names),'libraryName not present'
+              print('BANANA_NATIVE_IMPORT_COMPATIBLE yes (structural only)')
+          PY
+          sha256sum out/panvk_faux123_v1.1.8.adpkg.zip >out/driver-sha256.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: panvk-faux123-v118-validated
+          path: out/
+          if-no-files-found: warn
+          retention-days: 5
+          compression-level: 0
