@@ -93,12 +93,12 @@ jobs:
           python3 ../../banana/smx930/oomguard/apply_oomguard.py . --check
           python3 ../../banana/smx930/oomguard/apply_oomguard.py .
           OOMGUARD_SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/oomguard -p test_oomguard.py -v
+          SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/massopt -p test_massopt_ci.py -v
           python3 ../../banana/smx930/memguard/apply_memguard.py . --check
           python3 ../../banana/smx930/memguard/apply_memguard.py .
           MEMGUARD_SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/memguard -p test_memguard.py -v
           grep -q '"DM_MEM_FILEBACK_KINDS=shader"' android/app/src/main/java/dev/nxnative/android/MaliSmx930.java
           ! grep -q '"DM_MEM_FILEBACK_KINDS=shader,texture"' android/app/src/main/java/dev/nxnative/android/MaliSmx930.java
-          SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/massopt -p test_massopt_ci.py -v
           echo 'SOURCE_PATCHED=1' >> "$GITHUB_ENV"
       - name: Install Android SDK and NDK
         shell: bash
