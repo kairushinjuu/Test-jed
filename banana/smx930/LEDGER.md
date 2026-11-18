@@ -50,7 +50,7 @@
 
 
 ## 2026-11-17 14:23 JST — user terminated Test B early
-- Located Drive log `nxnative log 0400486024DEC000-20261117-142334.log` (file ID 1SrN3ikjxxlHYZrg-8oEruOlzeIVv7wPe), fetched authenticated raw bytes and analyzed 901 lines. Raw log is private; do not commit to public GitHub.
+- Located Drive log `nxnative log 0400486024DEC000-20261117-142334.log` (file ID [private-reference]), fetched authenticated raw bytes and analyzed 901 lines. Raw log is private; do not commit to public GitHub.
 - Confirmed effective `DM_VK_TL_HOST=0`, `DM_VK_PSO_ASYNC=1`, `DM_CODEC_STATS=1`. First environment line showing 2 is overridden by later Extra environment entry 1.
 - Intro only: 138 AAudio underruns in 10,000 callbacks, 435 ms silence, median 10.3 ms queue-submit CPU / 2.2 ms GPU; 6 queue submissions per intro frame; worst 1,240.9 ms frame (1,209.1 ms GPU fence wait), no pipeline creation. The current user stopped normally. No intro end or 3D scene, so cannot infer crash recovery or FPS improvement.
 - Compared older 13:35 introduction with 101 underruns in 8,000 callbacks, 375 ms silence, 9.8 ms median queue submit, 1,364.4 ms stall; effects small / runs temporally non-identical and two variables changed vs prior 14:03 crash run. No causal A/B ranking.
