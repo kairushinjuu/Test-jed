@@ -98,6 +98,7 @@ jobs:
           python3 ../../banana/smx930/memguard/apply_memguard.py .
           MEMGUARD_SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/memguard -p test_memguard.py -v
           python3 ../../banana/smx930/liveguard/apply_liveguard.py . --check
+          python3 ../../banana/smx930/liveguard/apply_liveguard.py .
           python3 ../../banana/smx930/stageguard/apply_stageguard.py . --check
           python3 ../../banana/smx930/stageguard/apply_stageguard.py .
           python3 -m py_compile ../../banana/smx930/stageguard/apply_stageguard.py
@@ -105,7 +106,6 @@ jobs:
           grep -q 'v022 image formats' dm/gfx/vk_android/vka_tex.c
           grep -q 'DM_VK_SCRATCH_IDLE_MB' dm/gfx/vk_android/vka_dev.c
           grep -q '0x13B5u ? 64.0 : 256.0' dm/gfx/vk_android/vka_dev.c
-          python3 ../../banana/smx930/liveguard/apply_liveguard.py .
           grep -q 'DM_VK_IMGMEM_KEEP_EMPTY' dm/gfx/vk_android/vka_imgmem.c
           grep -q 'v021 allocation breakdown' dm/gfx/vk_android/vka_tex.c
           grep -q 'v021 accounting' dm/host/hle_svc.c
