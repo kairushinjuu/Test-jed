@@ -65,7 +65,7 @@ You must already have an unsigned APK; the signing helper does not modify its ap
 - Original codebase: Xamarin/.NET Android, with C# inside XABA/XALZ assembly stores.
 - Java/DEX wrappers, ARM native AOT binaries, and separate cloud-service authorization are present.
 - Earlier clean APK: SHA-256 `bbbe3c24adb886c6154bb8fdab3ec3534be4398b2091f9cd9805681240cbe253`, 112894054 bytes (may change with publisher updates).
-- Earlier managed-IL verification: [private research PR #2](https://github.com/kairushinjuu/testweb/pull/2).
+- Earlier verification materials are intentionally kept outside this public repository.
 - See [docs/findings.md](docs/findings.md) and [docs/build_status.md](docs/build_status.md).
 
 This public repository excludes original APKs, decompiled proprietary source, signing credentials, premium-bypass patch implementation, and a verified full APK-rebuild pipeline.
