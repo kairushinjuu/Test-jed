@@ -1,0 +1,182 @@
+name: SM-X930 MemGuard v0.20 native source and APK
+on:
+  push:
+    branches: [banana-mali-g925-20261117]
+    paths:
+      - 'banana/smx930/memguard/**'
+      - '.github/workflows/smx930-memguard-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Read-only log regression suite
+        run: |
+          python3 -m unittest discover -s banana/smx930/tests -v
+          python3 banana/smx930/tools/analyze.py banana/smx930/tests/fixtures/faux-intro.log --json /tmp/smx930-intro.json
+          python3 -c "import json; x=json.load(open('/tmp/smx930-intro.json')); assert not x['target_met_on_observed_gameplay'] and x['intro_complete']"
+          bash -n banana/smx930/tools/collect-adb.sh
+      - name: Java startup policy regression suite
+        run: |
+          mkdir -p /tmp/smx930-java
+          javac -d /tmp/smx930-java banana/smx930/source_patch/MaliSmx930.java banana/smx930/source_patch/MaliSmx930JvmTest.java
+          java -cp /tmp/smx930-java dev.nxnative.android.MaliSmx930JvmTest
+  build:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+      - name: Fetch pinned official sources and matching original runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out source stage/lib stage/python
+          curl -fLsS --retry 3 --max-time 1000 \
+            https://git.eden-emu.dev/moceure/BananaNative/archive/e6b6f0d07a.zip \
+            -o out/BananaNative-e6b6f0d07a.zip
+          curl -fLsS --retry 3 --max-time 1000 \
+            https://git.eden-emu.dev/moceure/BananaNative/releases/download/v0.3.40/banana-native-v0.3.40.apk \
+            -o out/banana-native-original.apk
+          echo '519ace66f91136f40617d852fade50d3c70f6720fa13f44bdcfb782f5bb56c80  out/BananaNative-e6b6f0d07a.zip' | sha256sum -c -
+          echo '599760989fc20a0a4c25b593c88cf2c51ebccc588cd94b34d83066a4421a47ee  out/banana-native-original.apk' | sha256sum -c -
+          unzip -tqq out/BananaNative-e6b6f0d07a.zip
+          unzip -q out/BananaNative-e6b6f0d07a.zip -d source
+          test -f source/banananative/android/app/build.gradle
+          python3 - <<'PY'
+          import zipfile,io,os,pathlib
+          apk=zipfile.ZipFile("out/banana-native-original.apk")
+          stage=pathlib.Path("stage")
+          names=["libpython3.14.so","libnxpack.so","libzbicdec.so","libcra.so","libdmsh_xlate.so","libSPIRV-Tools-shared.so"]
+          for n in names:
+              (stage/"lib"/n).write_bytes(apk.read("lib/arm64-v8a/"+n))
+          z=zipfile.ZipFile(io.BytesIO(apk.read("assets/pack/python.zip")))
+          for member in z.namelist():
+              if member.startswith("/") or ".." in pathlib.PurePosixPath(member).parts:raise RuntimeError("unsafe stage entry")
+          z.extractall(stage/"python")
+          assert (stage/"python/lib/python3.14/os.py").exists()
+          print("Matching original on-device runtime staged")
+          PY
+          cd source/banananative
+          python3 dm/gfx/tools/xlate_tree.py --check-lib ../../stage/lib/libdmsh_xlate.so
+          python3 ../../banana/mali_patch_v0340.py
+          python3 ../../banana/smx930/source_patch/apply_smx930.py . --check
+          python3 ../../banana/smx930/source_patch/apply_smx930.py .
+          python3 ../../banana/smx930/source_patch/fix_pack_dump_import.py . --check
+          python3 ../../banana/smx930/source_patch/fix_pack_dump_import.py .
+          python3 ../../banana/smx930/massopt/apply_massopt.py . --check
+          python3 ../../banana/smx930/massopt/apply_massopt.py .
+          python3 ../../banana/smx930/drawopt/apply_drawopt.py . --check
+          python3 ../../banana/smx930/drawopt/apply_drawopt.py .
+          DRAWOPT_SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/drawopt -p test_drawopt.py -v
+          python3 ../../banana/smx930/burstopt/apply_burstopt.py . --check
+          python3 ../../banana/smx930/burstopt/apply_burstopt.py .
+          BURSTOPT_SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/burstopt -p test_burstopt.py -v
+          python3 ../../banana/smx930/faultdiag/apply_faultdiag.py . --check
+          python3 ../../banana/smx930/faultdiag/apply_faultdiag.py .
+          FAULTDIAG_SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/faultdiag -p test_faultdiag.py -v
+          python3 ../../banana/smx930/oomguard/apply_oomguard.py . --check
+          python3 ../../banana/smx930/oomguard/apply_oomguard.py .
+          OOMGUARD_SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/oomguard -p test_oomguard.py -v
+          python3 ../../banana/smx930/memguard/apply_memguard.py . --check
+          python3 ../../banana/smx930/memguard/apply_memguard.py .
+          MEMGUARD_SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/memguard -p test_memguard.py -v
+          grep -q '"DM_MEM_FILEBACK_KINDS=shader"' android/app/src/main/java/dev/nxnative/android/MaliSmx930.java
+          ! grep -q '"DM_MEM_FILEBACK_KINDS=shader,texture"' android/app/src/main/java/dev/nxnative/android/MaliSmx930.java
+          SOURCE_ROOT=. python3 -m unittest discover -s ../../banana/smx930/massopt -p test_massopt_ci.py -v
+          echo 'SOURCE_PATCHED=1' >> "$GITHUB_ENV"
+      - name: Install Android SDK and NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || :
+          sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+          echo "sdk.dir=$ANDROID_HOME" > source/banananative/android/app/local.properties
+          echo "NDK path: $ANDROID_HOME/ndk/28.2.13676358"
+      - name: Build SM-X930 Mali G925 APK (Ocarina of Time only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd source/banananative/android/app
+          chmod +x gradlew
+          ./gradlew --no-daemon --max-workers=2 \
+            -PnxGames=0400486024DEC000 \
+            -PnxApp=malig925memguard \
+            -PnxLabel="Banana Native SM-X930 MemGuard (isolated)" \
+            -PnxVersion=0.3.40-mali-v0.20.0 \
+            -PnxVersionCode=34200 \
+            -PnxPackStage="$GITHUB_WORKSPACE/stage" \
+            apk --stacktrace 2>&1 | tee "$GITHUB_WORKSPACE/out/build.log"
+          cp out/nxnative-android-malig925memguard.apk "$GITHUB_WORKSPACE/out/banana-native-smx930-memguard-v0.20.0.apk"
+          cd "$GITHUB_WORKSPACE"
+          sha256sum out/banana-native-smx930-memguard-v0.20.0.apk | tee out/apk-sha256.txt
+          unzip -tqq out/banana-native-smx930-memguard-v0.20.0.apk
+          python3 - <<'PY'
+          import zipfile, io, pathlib, sys, tempfile, importlib.util
+          apk="out/banana-native-smx930-memguard-v0.20.0.apk"
+          with zipfile.ZipFile(apk) as a:
+              with zipfile.ZipFile(io.BytesIO(a.read("assets/pack/tools.zip"))) as z:
+                  assert "scripts/pack_dump.py" in z.namelist()
+                  assert "dm/gfx/tools/shader_split.py" in z.namelist()
+                  with tempfile.TemporaryDirectory() as tmp:
+                      z.extractall(tmp)
+                      script=pathlib.Path(tmp)/"dm/gfx/tools/shader_split.py"
+                      content=script.read_text()
+                      assert " '..', '..', '..', 'scripts'" in content
+                      search_path=(script.parent/"../../../scripts").resolve()
+                      assert (search_path/"pack_dump.py").is_file()
+                      sys.path.insert(0,str(search_path))
+                      assert pathlib.Path(importlib.util.find_spec("pack_dump").origin).resolve()==search_path/"pack_dump.py"
+          print("PASS: packaged Python pack_dump import path and source layout")
+          PY
+      - name: Capture source patch and build metadata
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p out
+          cp banana/mali_patch_v0340.py out/ || :
+          cp banana/smx930/massopt/apply_massopt.py out/ || :
+          cp banana/smx930/drawopt/apply_drawopt.py out/ || :
+          cp banana/smx930/burstopt/apply_burstopt.py out/ || :
+          cp banana/smx930/faultdiag/apply_faultdiag.py out/ || :
+          cp banana/smx930/oomguard/apply_oomguard.py out/ || :
+          cp banana/smx930/memguard/apply_memguard.py out/ || :
+          if [ -f source/banananative/android/app/build.gradle ]; then
+            grep -n -E 'compileSdk|ndkVersion|targetSdk|applicationId|versionCode|nxPackStage' source/banananative/android/app/build.gradle > out/build-info.txt || :
+          fi
+          find out -maxdepth 1 -type f -printf '%f %s bytes\n' >out/files.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: banana-native-smx930-memguard-build-v020
+          path: |
+            out/banana-native-smx930-memguard-v0.20.0.apk
+            out/apk-sha256.txt
+            out/build.log
+            out/build-info.txt
+            out/files.txt
+            out/mali_patch_v0340.py
+            out/apply_massopt.py
+            out/apply_drawopt.py
+            out/apply_burstopt.py
+            out/apply_faultdiag.py
+            out/apply_oomguard.py
+            out/apply_memguard.py
+          if-no-files-found: warn
+          retention-days: 3
+          compression-level: 0
