@@ -1,0 +1,138 @@
+--- a/src/core/hle/service/nx2_gsv.h
++++ b/src/core/hle/service/nx2_gsv.h
+@@ -74,6 +74,7 @@
+ #include "core/hle/service/nx2_image_layout.h"
+ #include "core/hle/service/nx2_movie_clock.h"
+ #include "core/hle/service/nx2_video_input_queue.h"
++#include "core/hle/service/nx2_intro_skip.h"
+ #include "core/hle/service/nx2_present_pacer.h"
+ #include "core/hle/service/nx2_video_ready.h"
+ #include "core/hle/service/sm/sm.h"
+@@ -2877,6 +2878,15 @@
+                  w[6], w[7]);
+         {
+             std::scoped_lock lk{m_mutex};
++            // First AV1 stream only; every other game/movie remains untouched.
++            static std::atomic<bool> claimed_intro{false};
++            const bool skip_intro = m_intro_skip.Configure(
++                system.GetApplicationProcessProgramID(), codec,
++                std::getenv("HOKKAIDO_OOT_SKIP_INTRO"), claimed_intro);
++            if (skip_intro) {
++                LOG_INFO(Service, "Ocarina intro skip: first AV1 stream selected (experimental, "
++                                  "synthetic end-of-stream; HOKKAIDO_OOT_SKIP_INTRO=1)");
++            }
+             m_codec = std::move(codec);
+             m_width = w[5];
+             m_height = w[6];
+@@ -2999,6 +3009,33 @@
+         const u64 pts = u64{w[words]} | (u64{w[words + 1]} << 32);
+         const bool end = (w[words + 2] & 0xFF) != 0;
+         Log(ctx, "submit");
++        // On the first Ocarina AV1 stream, report video EOS through the normal decoder
++        // output queue and syncpoint. Merely hiding frames would leave the guest waiting.
++        // No packet is sent to MediaCodec: this also avoids decoder allocations.
++        bool skipped_input = false;
++        {
++            std::scoped_lock lk{m_mutex};
++            bool queue_eos = false;
++            if (m_intro_skip.AcceptPacket(queue_eos)) {
++                skipped_input = true;
++                if (queue_eos) {
++                    m_decoded.push_back({std::nullopt, pts, true});
++                    m_stream_ended = false;
++                    m_end_queued = true;
++                    m_ready->room.store(false, std::memory_order_relaxed);
++                    LOG_INFO(Service,
++                             "Ocarina intro skip: synthetic EOS queued at pts {} us; "
++                             "will signal decoder output syncpoint when an image is available",
++                             pts);
++                }
++            }
++        }
++        if (skipped_input) {
++            m_cv.notify_one();
++            const u64 id = ++m_submitted;
++            TipcReplyWords(ctx, {static_cast<u32>(id), static_cast<u32>(id >> 32)});
++            return;
++        }
+         Input input{{}, pts, end};
+         if (!ctx.BufferDescriptorA().empty()) {
+             const auto data = ctx.ReadBufferA(0);
+@@ -3057,6 +3094,7 @@
+                          m_stream_ended, m_end_queued);
+             }
+             m_inputs.Clear();
++            m_intro_skip.Stop(); // Subsequent movies use the unmodified decoder.
+             m_flush = true;
+             m_stream_ended = false;
+             m_end_queued = false;
+@@ -3556,6 +3594,7 @@
+     u32 m_dropped_in_a_row{};
+     std::optional<std::pair<s64, u64>> m_stream_start; ///< Host time (us) and pts of its first frame
+     Nx2VideoInputQueue m_inputs;
++    Nx2IntroSkip::Session m_intro_skip;
+     std::deque<Decoded> m_decoded;     ///< Waiting for a free output image
+     std::deque<u32> m_free;            ///< Output images, in the order the client acquires them
+     std::map<u32, Fence> m_release_fences;
+--- /dev/null
++++ b/src/core/hle/service/nx2_intro_skip.h
+@@ -0,0 +1,59 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++// Hokkaido experimental Ocarina opening cinematic skip policy (opt-in).
++#pragma once
++
++#include <atomic>
++#include <cstdint>
++#include <string_view>
++
++namespace Service::Nx2IntroSkip {
++
++inline constexpr uint64_t OcarinaProgramId = UINT64_C(0x0400486024DEC000);
++
++inline bool IsAv1(std::string_view codec) {
++    return codec == "video/av1" || codec.starts_with("video/av01");
++}
++
++inline bool Requested(const char* value) {
++    return value && value[0] == '1' && value[1] == '\0';
++}
++
++// Avoid skipping all movies: only the first AV1 decoder configured for Ocarina per process.
++// This is an experiment: only a device run can prove the guest reacts to synthetic EOS.
++class Session {
++public:
++    bool Configure(uint64_t program, std::string_view codec, const char* opt,
++                   std::atomic<bool>& claimed) {
++        active = false;
++        output_queued = false;
++        packets_ignored = 0;
++        if (program != OcarinaProgramId || !IsAv1(codec) || !Requested(opt)) {
++            return false;
++        }
++        bool expected = false;
++        active = claimed.compare_exchange_strong(expected, true);
++        return active;
++    }
++
++    // Returns true if the compressed packet is intentionally not decoded. Exactly one
++    // synthetic EOS is queued. Subsequent packets are accepted without new output.
++    bool AcceptPacket(bool& queue_eos) {
++        queue_eos = false;
++        if (!active) return false;
++        queue_eos = !output_queued;
++        output_queued = true;
++        ++packets_ignored;
++        return true;
++    }
++
++    void Stop() { active = false; output_queued = false; }
++    bool Active() const { return active; }
++    uint64_t PacketsIgnored() const { return packets_ignored; }
++
++private:
++    bool active{};
++    bool output_queued{};
++    uint64_t packets_ignored{};
++};
++
++} // namespace Service::Nx2IntroSkip
