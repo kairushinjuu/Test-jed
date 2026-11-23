@@ -1,0 +1,45 @@
+name: Triforce Gitea and ReLink exact-source capture
+on:
+  push:
+    branches: [banana-mali-g925-20261117]
+    paths: ['.github/workflows/oot-desktop-source-capture.yml']
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Collect exact commit sources, without running foreign code
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          curl -fLsS --retry 3 --max-time 60 https://git.triforceproject.com/api/v1/repos/triforce/source/branches/main -o out/triforce-branch.json
+          TRI_SHA="$(python3 -c 'import json;print(json.load(open("out/triforce-branch.json"))["commit"]["id"])')"
+          echo "Official Gitea Triforce commit: $TRI_SHA"
+          [[ "$TRI_SHA" =~ ^[0-9a-f]{40}$ ]]
+          curl -fLsS --retry 3 --max-time 600 "https://git.triforceproject.com/triforce/source/archive/${TRI_SHA}.zip" -o out/Triforce-official.zip
+          curl -fLsS --retry 3 --max-time 600 "https://codeload.github.com/pixl27/ProjectReLink/zip/54af18cda249233a9a9aafcddf5dc317cb3fad42" -o out/ReLink-54af18c.zip
+          for f in out/*.zip; do unzip -tqq "$f"; done
+          sha256sum out/*.zip > out/SHA256SUMS
+          python3 - <<'PY'
+          import pathlib,zipfile,json
+          out={}
+          for p in pathlib.Path('out').glob('*.zip'):
+              with zipfile.ZipFile(p) as z:
+                  files=z.infolist()
+                  bad=[f.filename for f in files if pathlib.PurePosixPath(f.filename).is_absolute() or '..' in pathlib.PurePosixPath(f.filename).parts]
+                  assert not bad
+                  out[p.name]={'bytes':p.stat().st_size,'entries':len(files),'expanded':sum(x.file_size for x in files),'paths_unsafe':bad}
+          pathlib.Path('out/ARCHIVE_MANIFEST.json').write_text(json.dumps(out,indent=2))
+          print(out)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: oot-pinned-desktop-sources
+          path: out/
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 7
