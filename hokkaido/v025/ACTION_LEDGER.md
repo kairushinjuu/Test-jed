@@ -16,3 +16,7 @@
 013. Created `.github/workflows/hokkaido-v025-android.yml` commit `e2f1cb7b84c0af912c150c1cb2984a7d0edc1c44`: pin source SHA, strict patch, separate APK package ID, sanitizer test, Android build and signature/archive gates.
 014. Triggered Actions run `45110615213` at workflow creation. Its status must be queried before claiming an APK exists. No device installation.
 015. Prepared engineering report, reproducible parser, source patch and present-state archive for persistent handoff.
+
+022. Re-ran Clang ASan/UBSan budget/eviction 250,000-case test and three Python log-parser tests locally on 2026-11-23; all PASS. Both Actions runs 45110615213 and 45110800028 remain in the actual Android native compilation step; no verified APK yet.
+023. Added rootless ADB capture script hokkaido/v025/capture_hokkaido_v025.sh (commit d360303ef13d60147468065354295fc6418bbcfb). Captures only local device telemetry (MemAvailable, SwapFree, PSI, per-app PSS, ApplicationExitInfo and app-PID logcat), no root and no automatic uploads. Bash syntax checks passed; not device-tested.
+024. Reviewed Android native env.txt loader and verified it derives the isolated package name from /proc/self/cmdline and calls setenv before normal initialization; use files/env.txt for opt-in v0.25 flags.
