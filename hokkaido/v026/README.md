@@ -6,9 +6,9 @@ Base: Hokkaido `feb08ad9ff87714b31219ad01b4bfbd6c8a69056`, plus exact Hokkaido v
 Hokkaido's own NX2 video decoder (`core/hle/service/nx2_gsv.h`) emits a frame via output image, GPU syncpoint, output-ready event, and `GetOutputInfo` EOS flag. Skipping shaders, suppressing rendered movie frames, or bypassing only MediaCodec could hang the guest. This patch queues exactly one synthetic EOS in the existing decoded-frame queue; the unmodified output pipeline then returns it to the guest with an actual signalled syncpoint. It does **not** patch the ROM, affect the embedded Banana Native engine, or inject a save state.
 
 ## Scope
-Opt-in `HOKKAIDO_OOT_SKIP_INTRO=1`, only title `0400486024DEC000`, first decoder `video/av1` or `video/av01*`, once per process; later movies normally decode. On Stop/Flush current session resumes normal decoding. `0` or absence means no change.
+Opt-in `HOKKAIDO_OOT_SKIP_INTRO=1`, only title `0400486024DEC000`, second AV1 decoder configured in the observed `e0f3ccfa` launch sequence, once per process; later movies normally decode. The first AV1 stream is the title-screen background, so it is left intact. On Stop/Flush current session resumes normal decoding. `0` or absence means no change.
 
-**Limit:** The game might not advance after an early synthetic EOS: no device test has established the guest's movie state machine or audio dependencies. This is an experiment, not a proven skip. There is no guarantee that the first AV1 stream on all game versions is the title intro.
+**Limit:** The second-stream selection is based on one device run of build `e0f3ccfa`; startup order could vary on another launch, update, or game state. The game might not advance after an early synthetic EOS: no device test has established the guest's movie state machine or audio dependencies. This remains experimental until verified on device, including later-video behavior.
 
 ## Enabling before launch
 For the isolated debug build (package `dev.lichii.android.lowramv026`), put these lines in its `Android/data/dev.lichii.android.lowramv026/files/env.txt` file:

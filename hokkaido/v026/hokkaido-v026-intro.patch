@@ -8,23 +8,27 @@
  #include "core/hle/service/nx2_present_pacer.h"
  #include "core/hle/service/nx2_video_ready.h"
  #include "core/hle/service/sm/sm.h"
-@@ -2877,6 +2878,15 @@
+@@ -2877,6 +2878,19 @@
                   w[6], w[7]);
          {
              std::scoped_lock lk{m_mutex};
-+            // First AV1 stream only; every other game/movie remains untouched.
++            // Device evidence for Ocarina build e0f3ccfa: AV1 stream 1 is the title
++            // background; stream 2 is the New Game story cinematic. Claim only that
++            // second stream, once per process, so later movies remain untouched.
++            static std::atomic<unsigned> av1_streams_seen{0};
 +            static std::atomic<bool> claimed_intro{false};
 +            const bool skip_intro = m_intro_skip.Configure(
 +                system.GetApplicationProcessProgramID(), codec,
-+                std::getenv("HOKKAIDO_OOT_SKIP_INTRO"), claimed_intro);
++                std::getenv("HOKKAIDO_OOT_SKIP_INTRO"), av1_streams_seen,
++                claimed_intro);
 +            if (skip_intro) {
-+                LOG_INFO(Service, "Ocarina intro skip: first AV1 stream selected (experimental, "
++                LOG_INFO(Service, "Ocarina intro skip: second AV1 stream selected (experimental, "
 +                                  "synthetic end-of-stream; HOKKAIDO_OOT_SKIP_INTRO=1)");
 +            }
              m_codec = std::move(codec);
              m_width = w[5];
              m_height = w[6];
-@@ -2999,6 +3009,33 @@
+@@ -2999,6 +3013,33 @@
          const u64 pts = u64{w[words]} | (u64{w[words + 1]} << 32);
          const bool end = (w[words + 2] & 0xFF) != 0;
          Log(ctx, "submit");
@@ -58,7 +62,7 @@
          Input input{{}, pts, end};
          if (!ctx.BufferDescriptorA().empty()) {
              const auto data = ctx.ReadBufferA(0);
-@@ -3057,6 +3094,7 @@
+@@ -3057,6 +3098,7 @@
                           m_stream_ended, m_end_queued);
              }
              m_inputs.Clear();
@@ -66,7 +70,7 @@
              m_flush = true;
              m_stream_ended = false;
              m_end_queued = false;
-@@ -3556,6 +3594,7 @@
+@@ -3556,6 +3598,7 @@
      u32 m_dropped_in_a_row{};
      std::optional<std::pair<s64, u64>> m_stream_start; ///< Host time (us) and pts of its first frame
      Nx2VideoInputQueue m_inputs;
@@ -76,7 +80,7 @@
      std::map<u32, Fence> m_release_fences;
 --- /dev/null
 +++ b/src/core/hle/service/nx2_intro_skip.h
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,64 @@
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +// Hokkaido experimental Ocarina opening cinematic skip policy (opt-in).
 +#pragma once
@@ -97,16 +101,21 @@
 +    return value && value[0] == '1' && value[1] == '\0';
 +}
 +
-+// Avoid skipping all movies: only the first AV1 decoder configured for Ocarina per process.
-+// This is an experiment: only a device run can prove the guest reacts to synthetic EOS.
++// Device evidence for the target build identifies the first AV1 stream as the title
++// background and the second as the New Game story cinematic. Select the second once per
++// process; only a device run can prove the guest reacts correctly to synthetic EOS.
 +class Session {
 +public:
 +    bool Configure(uint64_t program, std::string_view codec, const char* opt,
++                   std::atomic<unsigned>& av1_streams_seen,
 +                   std::atomic<bool>& claimed) {
 +        active = false;
 +        output_queued = false;
 +        packets_ignored = 0;
 +        if (program != OcarinaProgramId || !IsAv1(codec) || !Requested(opt)) {
++            return false;
++        }
++        if (av1_streams_seen.fetch_add(1, std::memory_order_relaxed) + 1 != 2) {
 +            return false;
 +        }
 +        bool expected = false;
