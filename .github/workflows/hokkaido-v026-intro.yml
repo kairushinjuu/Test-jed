@@ -1,0 +1,108 @@
+name: Hokkaido v0.26 isolated ARM64 verification build
+on:
+  push:
+    branches: [banana-mali-g925-20261117]
+    paths:
+      - 'hokkaido/v026/**'
+      - '.github/workflows/hokkaido-v026-intro.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 4
+      CCACHE: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare pinned Hokkaido checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 3 --max-time 900             https://codeload.github.com/pavelgajdo/Hokkaido/zip/feb08ad9ff87714b31219ad01b4bfbd6c8a69056 -o /tmp/hokkaido-source.zip
+          echo '2a59648ea956052127188c41a101e293d32b430a2f82fffeb34a1e8223ef9f35  /tmp/hokkaido-source.zip' | sha256sum -c -
+          unzip -tqq /tmp/hokkaido-source.zip
+          unzip -q /tmp/hokkaido-source.zip -d /tmp
+          mv /tmp/Hokkaido-feb08ad9ff87714b31219ad01b4bfbd6c8a69056 upstream
+          cd upstream
+          patch --batch --fuzz=0 -p1 < ../hokkaido/v025/hokkaido-v025-cumulative.patch
+          patch --batch --fuzz=0 -p1 < ../hokkaido/v026/hokkaido-v026-intro.patch
+          git init -q
+          git config user.name "Pinned Source Audit"
+          git config user.email "pinned-source@invalid.local"
+          git add -A && git commit -qm "Pinned Hokkaido feb08ad9 + v0.26 isolated patch"
+          sed -i 's/applicationId = "dev.lichii.android"/applicationId = "dev.lichii.android.lowramv026"/' src/android/app/build.gradle.kts
+          grep -q 'applicationId = "dev.lichii.android.lowramv026"' src/android/app/build.gradle.kts
+          echo 'PINNED_HOKKAIDO=feb08ad9ff87714b31219ad01b4bfbd6c8a69056' > ../BUILD_PROVENANCE.txt
+          sha256sum ../hokkaido/v025/hokkaido-v025-cumulative.patch ../hokkaido/v026/hokkaido-v026-intro.patch >> ../BUILD_PROVENANCE.txt
+          git status --short >> ../BUILD_PROVENANCE.txt
+      - name: Host policy regression under ASan and UBSan
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror             -fsanitize=address,undefined -fno-omit-frame-pointer -I upstream/src             hokkaido/v025/t_budget.cpp -o /tmp/t_budget
+          ASAN_OPTIONS=detect_leaks=1 /tmp/t_budget
+          clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -I upstream/src hokkaido/v026/t_intro_skip.cpp -o /tmp/t_intro_skip
+          ASAN_OPTIONS=detect_leaks=1 /tmp/t_intro_skip
+          grep -q 'HOKKAIDO_OOT_SKIP_INTRO' upstream/src/core/hle/service/nx2_gsv.h
+          grep -q 'm_decoded.push_back({std::nullopt, pts, true})' upstream/src/core/hle/service/nx2_gsv.h
+      - name: Free disk and install platform tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL || true
+          sudo apt-get update -q
+          sudo apt-get install -y ccache ninja-build glslang-tools
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;28.2.13676358" "cmake;3.22.1" "platforms;android-36" "build-tools;36.0.0"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build actual Android ARM64 APK
+        working-directory: upstream
+        shell: bash
+        env:
+          CCACHE: "true"
+          CMAKE_BUILD_PARALLEL_LEVEL: 4
+          CPM_SOURCE_CACHE: ${{ github.workspace }}/.cache/cpm
+        run: |
+          set -euo pipefail
+          export PATH="/usr/lib/ccache:$PATH"
+          chmod +x .ci/android/build.sh src/android/gradlew
+          .ci/android/build.sh -t standard -b Release 2>&1 | tee ../BUILD_LOG.txt
+      - name: Verify APK structure, identity and hashes
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp BUILD_LOG.txt out/ 2>/dev/null || true
+          cp BUILD_PROVENANCE.txt out/
+          find upstream/artifacts -maxdepth 1 -type f -name '*.apk' -exec cp '{}' out/ \; 2>/dev/null || true
+          if compgen -G 'out/*.apk' > /dev/null; then
+            sha256sum out/*.apk > out/APK_SHA256SUMS
+            python3 - <<'PY'
+          import glob,zipfile
+          p=glob.glob('out/*.apk')
+          assert p,'missing apk'
+          for name in p:
+              with zipfile.ZipFile(name) as z:
+                  assert z.testzip() is None
+                  items=z.namelist()
+                  assert any(x.startswith('lib/arm64-v8a/') and x.endswith('.so') for x in items)
+                  assert 'AndroidManifest.xml' in items
+              print('APK ZIP intact:',name)
+          PY
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs out/*.apk | tee out/APK_SIGNATURE.txt
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hokkaido-v026-intro-android-build
+          path: out/
+          retention-days: 7
+          if-no-files-found: warn
