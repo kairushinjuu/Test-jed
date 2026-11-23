@@ -10,3 +10,8 @@ Date: 2026-11-23. Branch: `kairushinjuu/Test-jed:banana-mali-g925-20261117`.
 6. Ran 250,000 deterministic source-level policy sessions under Clang ASan/UBSan: PASS (7,881 selected, 242,119 rejected); confirmed single EOS emitted per accepted session, strict title and codec matching, env handling, future-stream exclusion and no extra packets after Stop.
 7. Verified v0.26 patch applies cleanly with `patch -p1 --batch --fuzz=0 --dry-run` to local v0.25 code. First unit compilation failed due heterogeneous initializer-list types; repaired test-only type declaration and reran successfully. No service-level guest IPC simulation or tablet test yet.
 8. Confirmed `android_env_file.cpp` loads `env.txt` for the current Android application package at process startup, including early static initializers.
+
+9. Moved synthetic-EOS reply outside m_mutex, and verified patch byte-for-byte replay on top of v0.25 (SHA256 486dd21296c96b7be33202e8561dc7267d7e3a9e0114c6c6c2b19177452a1e74).
+10. Added non-destructive wireless ADB enable/disable script, syntax checked and exercised against mock ADB; uploaded to Library and committed private GitHub commit 5622a4b5 [skip ci]. This helper has NOT been run against a real tablet.
+11. Published full v0.26 source handover ZIP and SHA manifest: https://drive.google.com/file/d/1za39YoWmOzrNs6mCpbUcu-OYEBDzdxCC/view. No proprietary game data or keys included.
+12. Isolated v0.26 native Android CI run 45116306354: source patch and sanitizer phase passed; latest observation Android native compilation in progress. No apk or runtime result claimed before CI verifies it.
