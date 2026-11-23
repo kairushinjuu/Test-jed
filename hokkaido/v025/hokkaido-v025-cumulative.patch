@@ -1,0 +1,219 @@
+--- a/src/video_core/texture_cache/texture_cache.h
++++ b/src/video_core/texture_cache/texture_cache.h
+@@ -39,6 +39,7 @@
+ #include "video_core/texture_cache/image_view_base.h"
+ #include "video_core/texture_cache/samples_helper.h"
+ #include "video_core/texture_cache/texture_cache_base.h"
++#include "video_core/texture_cache/eviction_age.h"
+ #include "video_core/texture_cache/util.h"
+ #include "video_core/textures/decoders.h"
+ 
+@@ -156,7 +157,16 @@
+             const char* value = std::getenv("EDEN_NX2_TC_MIN_AGE");
+             return value != nullptr ? std::strtoull(value, nullptr, 10) : 0ULL;
+         }();
+-        ticks_to_destroy = (std::max)(ticks_to_destroy, min_age);
++        // Lichii #1290: retain recently used images only while budget permits;
++        // stale environment overrides must never block emergency eviction.
++        static const bool safe_age = [] {
++            const char* value = std::getenv("HOKKAIDO_SAFE_EVICTION_AGE");
++            return value != nullptr && value[0] == '1' && value[1] == '\0';
++        }();
++        ticks_to_destroy = safe_age
++            ? EvictionAge(ticks_to_destroy, min_age, total_used_memory, critical_memory,
++                          out_of_memory)
++            : (std::max)(ticks_to_destroy, min_age);
+         num_iterations = aggressive_mode ? 40 : (high_priority_mode ? 20 : 10);
+     };
+     // GPU-written images this pass evicts, copied back to guest memory together after it: one GPU
+@@ -476,7 +486,18 @@
+                 }
+             }
+             if (native_thresholds_applied && budget_check_frames++ % 30 == 0) {
+-                const u64 budget = runtime.GetDeviceMemoryBudget();
++                const u64 sampled_budget = runtime.GetDeviceMemoryBudget();
++                // Triforce / desktop Lichii: avoid instantly refilling the cache when the
++                // driver's reported budget bounces upward. Drops always apply immediately.
++                // This is a collector threshold only; the allocator still uses real budgets.
++                static const bool steady_budget = [] {
++                    const char* flag = std::getenv("HOKKAIDO_BUDGET_HYSTERESIS");
++                    return flag != nullptr && flag[0] == '1' && flag[1] == '\0';
++                }();
++                const u64 budget = steady_budget
++                    ? RetentionBudget(held_device_budget, sampled_budget)
++                    : sampled_budget;
++                held_device_budget = budget;
+                 if (budget > 2_GiB) {
+                     const u64 old_critical = critical_memory;
+                     const u64 margin = (std::min)(budget / 8, 1_GiB);
+@@ -552,6 +573,29 @@
+         }
+         total_used_memory -= (std::min)(total_used_memory, gpu_sentenced_bytes);
+     }
++    // Optional 120-frame counter: reports *driver* usage and VMA free block space,
++    // which differ from the cache's logical image bytes. Does not evict or mutate.
++    // A cache deletion is not a VRAM saving until VMA returns its backing blocks.
++    static const bool fragmentation_diag = [] {
++        const char* flag = std::getenv("HOKKAIDO_VRAM_DIAG");
++        return flag != nullptr && flag[0] == '1' && flag[1] == '\0';
++    }();
++    if (fragmentation_diag && frame_tick != 0 && frame_tick % 120 == 0) {
++        if constexpr (requires { runtime.GetDeviceMemoryBudget();
++                                 runtime.GetDeviceMemorySlack(); }) {
++            const u64 raw_budget = runtime.GetDeviceMemoryBudget();
++            const u64 driver_usage = runtime.GetDeviceMemoryUsage();
++            const u64 vma_slack = runtime.GetDeviceMemorySlack();
++            LOG_INFO(HW_GPU,
++                     "Hokkaido VRAM: frame={} usage={}MiB budget={}MiB block_slack={}MiB "
++                     "cache_accounted={}MiB critical={}MiB sentenced={}MiB "
++                     "gc_deletes={} failed_images={} (slack is main VMA heap only)",
++                     frame_tick, driver_usage >> 20, raw_budget >> 20,
++                     vma_slack >> 20, total_used_memory >> 20,
++                     critical_memory >> 20, gpu_sentenced_bytes >> 20,
++                     gc_deletes, seen_failed_images);
++        }
++    }
+     // Every 600 frames: device memory in use against the collector's thresholds.
+     // Skip expensive heap allocation, map construction, and sorting unless debug logging is explicitly enabled.
+     static const bool log_tc = std::getenv("EDEN_NX2_TC_LOG") != nullptr;
+--- a/src/video_core/texture_cache/texture_cache_base.h
++++ b/src/video_core/texture_cache/texture_cache_base.h
+@@ -177,6 +177,7 @@
+     u64 pressure_margin{};        ///< Extra room under the budget after images did not fit
+     u64 pressure_quiet_frames{};  ///< Frames since the last such image
+     u64 slack_margin{};           ///< Extra room for allocator block space the driver counts as used
++    u64 held_device_budget{};     ///< Opt-in bounded rise across successive GPU budget samples
+     u64 astc_opaque_images{};
+     u64 astc_alpha_images{};
+     Common::ScratchBuffer<u8> astc_scan_buffer;
+--- a/src/video_core/vulkan_common/vulkan_device.cpp
++++ b/src/video_core/vulkan_common/vulkan_device.cpp
+@@ -30,6 +30,7 @@
+ #include "video_core/vulkan_common/nsight_aftermath_tracker.h"
+ #include "video_core/vulkan_common/vma.h"
+ #include "video_core/vulkan_common/vulkan_device.h"
++#include "video_core/vulkan_common/android_pressure_policy.h"
+ #include "video_core/vulkan_common/vulkan_wrapper.h"
+ #include "video_core/gpu_logging/gpu_logging.h"
+ #ifdef EGLANTINE_STREAMLINE
+@@ -1991,9 +1992,21 @@
+     // The GPU shares the phone's RAM, and a driver's budget need not follow what is left of it:
+     // at most what the GPU uses now plus what Android can still hand out, less a reserve.
+     if (const u64 available = SystemMemoryInfo("MemAvailable"); available != 0) {
+-        constexpr u64 Reserve = 768_MiB;
+-        result = (std::min)(result, GetDeviceMemoryUsage() + available -
+-                                        (std::min)(available, Reserve));
++        // Opt-in Eden-Bounded-style pressure cushion. This is a *budget hint*:
++        // the existing texture collector owns all evictions and Vulkan fences.
++        static const bool pressure_policy = [] {
++            const char* flag = std::getenv("HOKKAIDO_PRESSURE_GOVERNOR");
++            return flag != nullptr && flag[0] == '1' && flag[1] == '\0';
++        }();
++        if (pressure_policy) {
++            result = (std::min)(result, VideoCommon::AndroidMemoryPolicy::RemainingBudget(
++                GetDeviceMemoryUsage(), available, SystemMemoryInfo("SwapTotal"),
++                SystemMemoryInfo("SwapFree")));
++        } else {
++            constexpr u64 Reserve = 768_MiB;
++            result = (std::min)(result, GetDeviceMemoryUsage() + available -
++                                            (std::min)(available, Reserve));
++        }
+     }
+     // Samsung's low-memory killer closes even the foreground game once less than 40% of swap is
+     // free and RAM runs short. Past half of it used, the GPU gives the difference back: RAM it
+--- /dev/null
++++ b/src/video_core/texture_cache/eviction_age.h
+@@ -0,0 +1,48 @@
++// SPDX-FileCopyrightText: Copyright 2026 Eden Emulator Project
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++#pragma once
++
++#include <algorithm>
++
++#include "common/common_types.h"
++
++namespace VideoCommon {
++
++/// Frames an image must go unused before the collector deletes it while the device has room. The
++/// collector's thresholds sit under what a scene can use: Mario Kart World's races need about
++/// 5.5-6.3 GB against a 5 GiB critical threshold, and deleting images unused for 10 frames there
++/// made about 42 images again every frame (back thread 25 -> 35 ms per frame).
++constexpr u64 MinEvictionAge = 150;
++
++/// Frames since its last use before the collector may delete an image. `mode_age` is the age the
++/// collector's mode asks for; it applies as is only when memory is short: an image could not be
++/// made, no limit is known (0), or the usage has reached `limit` (the room the driver's budget,
++/// its margins and the host's commit leave). `override_age` (EDEN_NX2_TC_MIN_AGE) raises the age
++/// only while there is room, so a stale override can't stop eviction when memory is short (#1290).
++[[nodiscard]] constexpr u64 EvictionAge(u64 mode_age, u64 override_age, u64 usage, u64 limit,
++                                        bool out_of_memory) {
++    if (out_of_memory || limit == 0 || usage >= limit) {
++        return mode_age;
++    }
++    return (std::max)({mode_age, MinEvictionAge, override_age});
++}
++
++/// How far the budget RetentionBudget follows may rise at each budget check (every 30 frames).
++constexpr u64 RetentionBudgetRise = u64{16} << 20;
++
++/// The driver budget the retention limit is taken from: the lowest one read lately. It follows
++/// a drop at once and a rise by RetentionBudgetRise per check (about 1 GiB in 2000 frames).
++/// Windows moves the budget with other programs' video memory: on a 16 GB card in Ocarina of
++/// Time at 2x it fell from 15.2 to 14.1-14.4 GB every 10-25 s, while the retention limit sat
++/// only the block slack (0.5-0.8 GB) under the budget read last. Each drop took the process over
++/// the budget (Streamline: out of VRAM) and frames went from 10-13 ms to 35-80 ms.
++/// `held` is the last value (0 before the first check), `budget` the one read now.
++[[nodiscard]] constexpr u64 RetentionBudget(u64 held, u64 budget) {
++    if (held == 0 || budget <= held) {
++        return budget;
++    }
++    return (std::min)(budget, held + RetentionBudgetRise);
++}
++
++} // namespace VideoCommon
+--- /dev/null
++++ b/src/video_core/vulkan_common/android_pressure_policy.h
+@@ -0,0 +1,42 @@
++// SPDX-FileCopyrightText: 2026 OpenAI-assisted analysis, adapted from Eden-Bounded concepts
++// SPDX-License-Identifier: GPL-3.0-or-later
++#pragma once
++#include <algorithm>
++#include <cstdint>
++
++namespace VideoCommon::AndroidMemoryPolicy {
++constexpr uint64_t MiB = uint64_t{1} << 20;
++
++// Budget policy only: does not destroy GPU objects, touch page mappings, or force a
++// lower guest memory layout.  The existing Vulkan texture collector remains the
++// sole owner of reclamation and deferred GPU resource destruction.
++[[nodiscard]] constexpr uint64_t ReserveBytes(uint64_t available, uint64_t swap_total,
++                                               uint64_t swap_free) noexcept {
++    constexpr uint64_t Base = 768 * MiB;
++    constexpr uint64_t MaximumExtra = 768 * MiB;
++    uint64_t extra = 0;
++    if (swap_total != 0) {
++        swap_free = (std::min)(swap_free, swap_total);
++        // Begin responding at 25% swap use, before Android LMKD's emergency.
++        const uint64_t used = swap_total - swap_free;
++        if (used > swap_total / 4) {
++            extra = (std::min)((used - swap_total / 4) / 2, 512 * MiB);
++        }
++    }
++    if (available < 1536 * MiB) {
++        const uint64_t shortage = 1536 * MiB - available;
++        extra = (std::min)(MaximumExtra, extra + (std::min)(shortage / 2, 512 * MiB));
++    }
++    return Base + extra;
++}
++
++// Non-destructive upper bound for GPU budget.  Never reports less than current
++// GPU allocation usage: the renderer must be able to retire allocations itself.
++[[nodiscard]] constexpr uint64_t RemainingBudget(uint64_t usage, uint64_t available,
++                                                  uint64_t swap_total, uint64_t swap_free) noexcept {
++    const uint64_t reserve = ReserveBytes(available, swap_total, swap_free);
++    const uint64_t slack = available > reserve ? available - reserve : 0;
++    // Saturate rather than wrapping near UINT64_MAX.
++    return UINT64_MAX - usage < slack ? UINT64_MAX : usage + slack;
++}
++} // namespace VideoCommon::AndroidMemoryPolicy
