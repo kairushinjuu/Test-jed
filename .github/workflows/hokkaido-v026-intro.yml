@@ -29,6 +29,7 @@ jobs:
           cd upstream
           patch --batch --fuzz=0 -p1 < ../hokkaido/v025/hokkaido-v025-cumulative.patch
           patch --batch --fuzz=0 -p1 < ../hokkaido/v026/hokkaido-v026-intro.patch
+          patch --batch --fuzz=0 -p1 < ../hokkaido/v026/hokkaido-v026-inframe-gc.patch
           git init -q
           git config user.name "Pinned Source Audit"
           git config user.email "pinned-source@invalid.local"
@@ -36,7 +37,7 @@ jobs:
           sed -i 's/applicationId = "dev.lichii.android"/applicationId = "dev.lichii.android.lowramv026"/' src/android/app/build.gradle.kts
           grep -q 'applicationId = "dev.lichii.android.lowramv026"' src/android/app/build.gradle.kts
           echo 'PINNED_HOKKAIDO=feb08ad9ff87714b31219ad01b4bfbd6c8a69056' > ../BUILD_PROVENANCE.txt
-          sha256sum ../hokkaido/v025/hokkaido-v025-cumulative.patch ../hokkaido/v026/hokkaido-v026-intro.patch >> ../BUILD_PROVENANCE.txt
+          sha256sum ../hokkaido/v025/hokkaido-v025-cumulative.patch ../hokkaido/v026/hokkaido-v026-intro.patch ../hokkaido/v026/hokkaido-v026-inframe-gc.patch >> ../BUILD_PROVENANCE.txt
           git status --short >> ../BUILD_PROVENANCE.txt
       - name: Host policy regression under ASan and UBSan
         shell: bash
@@ -48,6 +49,7 @@ jobs:
           ASAN_OPTIONS=detect_leaks=1 /tmp/t_intro_skip
           grep -q 'HOKKAIDO_OOT_SKIP_INTRO' upstream/src/core/hle/service/nx2_gsv.h
           grep -q 'm_decoded.push_back({std::nullopt, pts, true})' upstream/src/core/hle/service/nx2_gsv.h
+          grep -q 'HOKKAIDO_INFRAME_TC_GC' upstream/src/video_core/texture_cache/texture_cache.h
       - name: Free disk and install platform tools
         shell: bash
         run: |

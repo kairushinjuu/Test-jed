@@ -1,0 +1,25 @@
+--- a/src/video_core/texture_cache/texture_cache_base.h
++++ b/src/video_core/texture_cache/texture_cache_base.h
+@@ -178,7 +178,8 @@
+     u64 pressure_quiet_frames{};  ///< Frames since the last such image
+     u64 slack_margin{};           ///< Extra room for allocator block space the driver counts as used
+     u64 held_device_budget{};     ///< Opt-in bounded rise across successive GPU budget samples
+-    u64 in_frame_gc_tick{std::numeric_limits<u64>::max()}; ///< One pressure collection per emulated frame
++    /// Emulated frame in which the in-frame collector last ran.
++    u64 in_frame_gc_tick{std::numeric_limits<u64>::max()};
+     u64 astc_opaque_images{};
+     u64 astc_alpha_images{};
+     Common::ScratchBuffer<u8> astc_scan_buffer;
+--- a/src/video_core/texture_cache/texture_cache.h
++++ b/src/video_core/texture_cache/texture_cache.h
+@@ -3527,8 +3527,8 @@
+         return value != nullptr && value[0] == '1' && value[1] == '\0';
+     }();
+     const bool already_attempted = in_frame_gc_tick == frame_tick;
+-    if (AndroidMemoryPolicy::ShouldCollectInFrame(in_frame_gc, already_attempted,
+-                                                  total_used_memory, critical_memory)) {
++    if (AndroidMemoryPolicy::ShouldCollectInFrame(
++            in_frame_gc, already_attempted, total_used_memory, critical_memory)) {
+         in_frame_gc_tick = frame_tick;
+         const u64 before = total_used_memory;
+         const u64 deletes_before = gc_deletes + gc_costly_deletes + gc_download_deletes;

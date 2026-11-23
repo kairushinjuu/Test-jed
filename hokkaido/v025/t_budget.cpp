@@ -4,9 +4,11 @@
 #include <iostream>
 #include <limits>
 #include "video_core/texture_cache/eviction_age.h"
+#include "video_core/vulkan_common/android_pressure_policy.h"
 using VideoCommon::RetentionBudget;
 using VideoCommon::RetentionBudgetRise;
 using VideoCommon::EvictionAge;
+using VideoCommon::AndroidMemoryPolicy::ShouldCollectInFrame;
 static uint64_t state=0x0123456789abcdefULL;
 static uint64_t rand64(){state^=state<<13;state^=state>>7;state^=state<<17;return state;}
 int main(){
@@ -31,6 +33,13 @@ int main(){
    else assert(age>=VideoCommon::MinEvictionAge);
  }
  assert(drops>10000&&slow>10000);
+ // In-frame collection runs only at/above the critical threshold and at most once per frame.
+ assert(!ShouldCollectInFrame(false,false,1024,512));
+ assert(!ShouldCollectInFrame(true,true,1024,512));
+ assert(!ShouldCollectInFrame(true,false,511,512));
+ assert(ShouldCollectInFrame(true,false,512,512));
+ assert(ShouldCollectInFrame(true,false,513,512));
+ assert(!ShouldCollectInFrame(true,false,513,0));
  // Reproduce the whole pressure trace, including a rapid 11 -> 8 GiB budget drop,
  // then a 10 GiB rebound that must be followed only gradually.
  held=RetentionBudget(0,11*1024*MiB);
