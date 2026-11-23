@@ -1,0 +1,45 @@
+name: Hokkaido Security Audit Source Capture (no execution)
+on:
+  push:
+    branches: [banana-mali-g925-20261117]
+    paths:
+      - '.github/workflows/hokkaido-source-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve pinned source archives without executing them
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          curl -fLsS --retry 3 --max-time 900 https://codeload.github.com/pavelgajdo/Hokkaido/zip/feb08ad9ff87714b31219ad01b4bfbd6c8a69056 -o out/Hokkaido-feb08ad9.zip
+          curl -fLsS --retry 3 --max-time 900 https://codeload.github.com/Epickitrolaz/EdenOptimized/zip/c7657b44fe87de0b727d6854847285da7ae3c23a -o out/EdenOptimized-c7657b4.zip
+          curl -fLsS --retry 3 --max-time 900 https://codeload.github.com/zortos293/Lichii/zip/91d9de62de2e4b99467e4bfe83d6338e5a9c8701 -o out/Lichii-91d9de6.zip
+          sha256sum out/*.zip | tee out/SHA256SUMS
+          for f in out/*.zip; do unzip -tqq "$f"; done
+          python3 - <<'PY'
+          import zipfile,json,pathlib
+          results=[]
+          for p in pathlib.Path('out').glob('*.zip'):
+              with zipfile.ZipFile(p) as z:
+                  info=z.infolist()
+                  names=[i.filename for i in info]
+                  unsafe=[n for n in names if n.startswith('/') or '..' in pathlib.PurePosixPath(n).parts]
+                  results.append(dict(file=p.name,bytes=p.stat().st_size,entries=len(info),uncompressed=sum(i.file_size for i in info),symlinks=sum((i.external_attr>>16)&0o170000==0o120000 for i in info),unsafe_entries=unsafe))
+                  assert not unsafe
+          pathlib.Path('out/MANIFEST.json').write_text(json.dumps(results,indent=2))
+          print(json.dumps(results,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hokkaido-source-audit-pinned
+          path: out/
+          compression-level: 0
+          retention-days: 3
