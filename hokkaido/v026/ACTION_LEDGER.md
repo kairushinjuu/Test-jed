@@ -24,3 +24,13 @@ Date: 2026-11-23. Branch: `kairushinjuu/Test-jed:banana-mali-g925-20261117`.
 - Added `hokkaido-v026-inframe-gc.patch`, an opt-in Android-only collector call after completed image registration. It attempts at most once per emulated frame when logical texture-cache usage reaches the critical threshold; the existing collector retains its LRU age filter, GPU synchronization and deferred destruction behavior.
 - Extended the host budget test with threshold/feature/once-per-frame cases and updated the v0.26 workflow to apply/hash the patch and check the hook.
 - Patch applies with `--fuzz=0` to the exact v0.25+v0.26 CI source. GCC ASan/UBSan policy and intro-skip host suites pass; Clang sanitizer runtime is absent locally. Device/build result pending.
+
+### EXP-008 patch-context failure and corrected base (2026-11-23)
+- CI runs `45168247185` and `45168247206` both stopped in source preparation because the first supplementary patch had been generated against a scratch tree that had already received the edit. No host or Android compile ran and no APK exists from this commit.
+- Rebuilt a fresh base from the pinned archive SHA-256 `2a59648ea956052127188c41a101e293d32b430a2f82fffeb34a1e8223ef9f35`, applied the existing v0.25 and v0.26 patches, regenerated the supplemental patch, and verified exact `--fuzz=0` application. The corrected policy and intro host tests pass under GCC ASan/UBSan.
+- Corrected patch hash: `8776954ef5c8993698af8b8c3a3bf3d75303c2a6339978482631fce9f2cb3023`; awaiting follow-up CI.
+
+### EXP-008 correction after duplicate CI failures (2026-11-23)
+- Run `45168247185` failed patch application because the initial diff came from a contaminated scratch tree. Run `45168247206` failed compilation because the new helper test had been put in the v0.25 test file, which is not patched with the v0.26 helper.
+- Regenerated the patch from a newly extracted pinned archive plus both existing patches; zero-context patch applies with `--fuzz=0`. Corrected hash: `e22351ce868815472e1d308a6e0a55725f9e94d8ccde15ea07e1067f2720e9cd`.
+- Restored the v0.25 test and added `t_inframe_gc.cpp` to the v0.26 sanitizer step. GCC ASan/UBSan passes the v0.25 policy test, the in-frame gate boundary test, and the intro-skip test. No Android APK was produced in the failed runs.

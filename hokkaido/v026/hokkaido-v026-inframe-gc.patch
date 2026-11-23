@@ -1,25 +1,44 @@
+--- a/src/video_core/vulkan_common/android_pressure_policy.h
++++ b/src/video_core/vulkan_common/android_pressure_policy.h
+@@ -41,0 +42,8 @@
++
++// A scene can register many images before the next frame tick. This gate lets the texture cache
++// run its existing, age-safe collector once during that burst, after a completed registration.
++[[nodiscard]] constexpr bool ShouldCollectInFrame(bool enabled, bool already_attempted,
++                                                  uint64_t cached_bytes,
++                                                  uint64_t critical_bytes) noexcept {
++    return enabled && !already_attempted && critical_bytes != 0 && cached_bytes >= critical_bytes;
++}
 --- a/src/video_core/texture_cache/texture_cache_base.h
 +++ b/src/video_core/texture_cache/texture_cache_base.h
-@@ -178,7 +178,8 @@
-     u64 pressure_quiet_frames{};  ///< Frames since the last such image
-     u64 slack_margin{};           ///< Extra room for allocator block space the driver counts as used
-     u64 held_device_budget{};     ///< Opt-in bounded rise across successive GPU budget samples
--    u64 in_frame_gc_tick{std::numeric_limits<u64>::max()}; ///< One pressure collection per emulated frame
+@@ -180,0 +181,2 @@
 +    /// Emulated frame in which the in-frame collector last ran.
 +    u64 in_frame_gc_tick{std::numeric_limits<u64>::max()};
-     u64 astc_opaque_images{};
-     u64 astc_alpha_images{};
-     Common::ScratchBuffer<u8> astc_scan_buffer;
 --- a/src/video_core/texture_cache/texture_cache.h
 +++ b/src/video_core/texture_cache/texture_cache.h
-@@ -3527,8 +3527,8 @@
-         return value != nullptr && value[0] == '1' && value[1] == '\0';
-     }();
-     const bool already_attempted = in_frame_gc_tick == frame_tick;
--    if (AndroidMemoryPolicy::ShouldCollectInFrame(in_frame_gc, already_attempted,
--                                                  total_used_memory, critical_memory)) {
+@@ -44,0 +45 @@
++#include "video_core/vulkan_common/android_pressure_policy.h"
+@@ -3519,0 +3521,23 @@
++#ifdef __ANDROID__
++    // A Switch 2 scene can register several GiB of images before TickFrame gets a chance to
++    // collect. After registration has completed, run the existing collector once at the
++    // in-frame threshold. Newly registered images are same-frame LRU entries and stay ineligible.
++    static const bool in_frame_gc = [] {
++        const char* value = std::getenv("HOKKAIDO_INFRAME_TC_GC");
++        return value != nullptr && value[0] == '1' && value[1] == '\0';
++    }();
++    const bool already_attempted = in_frame_gc_tick == frame_tick;
 +    if (AndroidMemoryPolicy::ShouldCollectInFrame(
 +            in_frame_gc, already_attempted, total_used_memory, critical_memory)) {
-         in_frame_gc_tick = frame_tick;
-         const u64 before = total_used_memory;
-         const u64 deletes_before = gc_deletes + gc_costly_deletes + gc_download_deletes;
++        in_frame_gc_tick = frame_tick;
++        const u64 before = total_used_memory;
++        const u64 deletes_before = gc_deletes + gc_costly_deletes + gc_download_deletes;
++        RunGarbageCollector(false);
++        const u64 deleted = gc_deletes + gc_costly_deletes + gc_download_deletes - deletes_before;
++        LOG_INFO(HW_GPU,
++                 "In-frame texture collection: frame {} before {} MiB after {} MiB "
++                 "critical {} MiB, deleted {} images",
++                 frame_tick, before >> 20, total_used_memory >> 20,
++                 critical_memory >> 20, deleted);
++    }
++#endif

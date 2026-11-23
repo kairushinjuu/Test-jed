@@ -45,6 +45,8 @@ jobs:
           set -euo pipefail
           clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror             -fsanitize=address,undefined -fno-omit-frame-pointer -I upstream/src             hokkaido/v025/t_budget.cpp -o /tmp/t_budget
           ASAN_OPTIONS=detect_leaks=1 /tmp/t_budget
+          clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -I upstream/src hokkaido/v026/t_inframe_gc.cpp -o /tmp/t_inframe_gc
+          ASAN_OPTIONS=detect_leaks=1 /tmp/t_inframe_gc
           clang++ -std=c++20 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -I upstream/src hokkaido/v026/t_intro_skip.cpp -o /tmp/t_intro_skip
           ASAN_OPTIONS=detect_leaks=1 /tmp/t_intro_skip
           grep -q 'HOKKAIDO_OOT_SKIP_INTRO' upstream/src/core/hle/service/nx2_gsv.h
